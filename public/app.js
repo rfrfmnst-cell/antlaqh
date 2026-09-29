@@ -1,0 +1,718 @@
+const $ = (s) => document.querySelector(s);
+const main = $("#main");
+const state = {
+  user: null,
+  csrf: "",
+  config: null,
+  sequence: 0,
+  challenge: null,
+};
+const escape = (value) =>
+  String(value ?? "").replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        c
+      ],
+  );
+const E = escape;
+const money = (value) =>
+  new Intl.NumberFormat("ar-SA", {
+    style: "currency",
+    currency: "SAR",
+    maximumFractionDigits: 2,
+  }).format((value || 0) / 100);
+const date = (value) =>
+  value
+    ? new Date(value).toLocaleDateString("ar-SA", {
+        calendar: "gregory",
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      })
+    : "—";
+const time = (value) =>
+  value
+    ? new Date(value).toLocaleString("ar-SA", {
+        calendar: "gregory",
+        dateStyle: "medium",
+        timeStyle: "short",
+      })
+    : "";
+const paths = {
+  globe:
+    "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0M3 12h18M12 3c4 5 4 13 0 18-4-5-4-13 0-18",
+  bag: "M5 7h14l1 14H4L5 7Zm3 0V5a4 4 0 0 1 8 0v2",
+  code: "m8 7-5 5 5 5m8-10 5 5-5 5m-3-13-2 20",
+  chart: "M4 4v16h17M8 15l4-5 4 3 5-7",
+  spark: "m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3Z",
+  check: "m5 12 4 4L19 6",
+  grid: "M3 3h7v7H3Zm11 0h7v7h-7ZM3 14h7v7H3Zm11 0h7v7h-7Z",
+  file: "M14 2H5v20h14V7l-5-5Zm0 0v5h5M8 12h8m-8 4h6",
+  user: "M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0M4 21v-2a8 8 0 0 1 16 0v2",
+  message: "M21 4H3v13h5l4 4 4-4h5V4Z",
+  bell: "M5 17V9a7 7 0 0 1 14 0v8l2 2H3l2-2Zm5 5h4",
+  logout: "M10 3H4v18h6m4-14 5 5-5 5m-5-5h10",
+  menu: "M3 6h18M3 12h18M3 18h18",
+  download: "M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4",
+  clock: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0M12 7v5l3 2",
+  lock: "M5 10h14v11H5V10Zm3 0V6a4 4 0 0 1 8 0v4",
+  plus: "M12 4v16M4 12h16",
+  search: "M16 10a6 6 0 1 1-12 0 6 6 0 0 1 12 0m-1 5 6 6",
+};
+const icon = (name) =>
+  `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[name] || paths.file}"/></svg>`;
+const statuses = {
+  received: "تم الاستلام",
+  reviewing: "قيد المراجعة",
+  quoted: "بانتظار موافقتك",
+  awaiting_payment: "بانتظار الدفع",
+  paid: "تم تأكيد الدفع",
+  in_progress: "قيد التنفيذ",
+  final_review: "المراجعة النهائية",
+  completed: "مكتمل",
+  cancelled: "ملغي",
+};
+const badge = (o) =>
+  `<span class="badge ${E(o.status)}">${E(statuses[o.status] || o.status)}</span>`;
+const link = (href, label, kind = "") =>
+  `<a class="btn ${kind}" href="#${href}">${label}</a>`;
+let fieldCounter = 0;
+const field = (name, label, type = "text", opts = "") => {
+  const inputId = `${name}-${++fieldCounter}`;
+  return `<div class="field"><label for="${inputId}">${label}</label><input id="${inputId}" name="${name}" type="${type}" ${opts}></div>`;
+};
+const textarea = (name, label, opts = "") => {
+  const inputId = `${name}-${++fieldCounter}`;
+  return `<div class="field"><label for="${inputId}">${label}</label><textarea id="${inputId}" name="${name}" ${opts}></textarea></div>`;
+};
+const errors = () => '<div class="error" role="alert"></div>';
+const empty = (title, message, action = "") =>
+  `<div class="empty"><div class="service-icon">${icon("file")}</div><h2>${title}</h2><p>${message}</p>${action}</div>`;
+const formData = (form) => Object.fromEntries(new FormData(form));
+const go = (path) => {
+  location.hash = path;
+};
+function notify(message) {
+  const el = $("#toast");
+  el.textContent = message;
+  el.hidden = false;
+  clearTimeout(state.toastTimer);
+  state.toastTimer = setTimeout(() => (el.hidden = true), 5000);
+}
+async function api(path, options = {}) {
+  const headers = { ...options.headers };
+  if (
+    options.body &&
+    typeof options.body !== "string" &&
+    !(options.body instanceof File)
+  ) {
+    options.body = JSON.stringify(options.body);
+    headers["Content-Type"] = "application/json";
+  }
+  if (options.method && options.method !== "GET")
+    headers["X-CSRF-Token"] = state.csrf;
+  const response = await fetch(path, {
+    credentials: "same-origin",
+    ...options,
+    headers,
+  });
+  const data = await response
+    .json()
+    .catch(() => ({ error: "تعذر قراءة استجابة الخادم." }));
+  if (!response.ok) throw new Error(data.error || "تعذر إتمام العملية.");
+  return data;
+}
+function header(path) {
+  const authed = !!state.user,
+    admin = state.user?.role === "admin";
+  $("#header").innerHTML =
+    `<div class="wrap header-inner"><a class="brand" href="#/" aria-label="انطلاقة، الصفحة الرئيسية"><span class="brand-symbol">إ</span><span>انطلاقة<small>INTLAKAH</small></span></a><nav class="main-nav" id="main-nav" aria-label="التنقل الرئيسي">${[
+      ["/", "الرئيسية"],
+      ["/services", "خدماتنا"],
+      ["/store", "المتجر الرقمي"],
+      ["/about", "عن انطلاقة"],
+    ]
+      .map(
+        ([p, l]) =>
+          `<a href="#${p}" class="${path === p ? "active" : ""}" ${path === p ? 'aria-current="page"' : ""}>${l}</a>`,
+      )
+      .join(
+        "",
+      )}</nav><div class="header-actions">${authed ? `<a class="user-chip" href="#${admin ? "/admin" : "/dashboard"}"><span class="avatar">${E(state.user.name.slice(0, 1))}</span><span class="user-name">${E(state.user.name.split(" ")[0])}</span></a>` : link("/login", "تسجيل الدخول", "ghost")} ${link("/start", "ابدأ مشروعك")}<button class="btn ghost menu-button" data-action="menu" aria-label="فتح القائمة" aria-expanded="false" aria-controls="main-nav">${icon("menu")}</button></div></div>`;
+  $("#footer").innerHTML =
+    `<div class="wrap footer-top"><div><a class="brand" href="#/">انطلاقة</a><p>شريكك في بناء مشروعك الرقمي، من الفكرة إلى التشغيل والنمو.</p></div><nav class="footer-links" aria-label="روابط إضافية"><a href="#/services">الخدمات</a><a href="#/store">المتجر الرقمي</a><a href="#/support">الدعم والمساعدة</a><a href="#/terms">الشروط والأحكام</a><a href="#/privacy">سياسة الخصوصية</a></nav></div><div class="wrap footer-bottom"><span>© ${new Date().getFullYear()} انطلاقة. جميع الحقوق محفوظة.</span><span>خدمات رقمية · مشاريع تنمو معك</span></div>`;
+}
+function serviceCards() {
+  return (
+    state.config.services
+      .map(
+        (s) =>
+          `<article class="service-card"><div class="service-icon">${icon(s.icon)}</div><span class="category">${s.category}</span><h3>${s.title}</h3><p>${s.description}</p><a class="link" href="#/start?service=${s.id}">اطلب هذه الخدمة</a></article>`,
+      )
+      .join("") +
+    `<article class="service-card cta-card"><h3>لديك فكرة مختلفة؟</h3><p>شاركنا ما تريد تحقيقه، وسنبدأ بتحديد نطاق مشروعك.</p>${link("/start", "تحدث عن مشروعك")}</article>`
+  );
+}
+function home() {
+  return `<div class="wrap"><section class="hero"><div><div class="eyebrow">منصة انطلاقة للخدمات الرقمية</div><h1>فكرتك تستحق<br>بداية <em>تصنع الفرق.</em></h1><p>نبني موقعك ومتجرك وتطبيقك، ونرافقك في خطوات التسويق والنمو. مشروعك وفريقك وتحديثاتك، في مساحة واحدة.</p><div class="actions">${link("/start", "ابدأ مشروعك الآن")}${link("/services", "اكتشف الخدمات", "secondary")}</div><div class="hero-note"><span>نطاق واضح</span><span>متابعة مستمرة</span><span>تواصل مباشر</span></div></div><div class="project-visual"><div class="visual-top"><span>رحلتك مع انطلاقة</span><span class="visual-label" dir="ltr">YOUR NEXT CHAPTER</span></div><div class="visual-title">كل خطوة تقرّبك<br>من مشروعك القادم.</div><div class="journey"><div class="journey-row selected"><span class="number">01</span><div><strong>نبدأ بفكرتك</strong><small>نستمع ونحدد الاحتياج</small></div></div><div class="journey-row"><span class="number">02</span><div><strong>نرسم الطريق</strong><small>نطاق، عرض سعر، واتفاق</small></div></div><div class="journey-row"><span class="number">03</span><div><strong>نبني وننطلق</strong><small>تنفيذ، مراجعة، وتسليم</small></div></div></div><div class="visual-foot"><span>فكرتك بداية الحكاية.</span>${icon("spark")}</div></div></section><section class="section" aria-labelledby="services-title"><div class="section-head"><div><div class="eyebrow">ما الذي تحتاجه لمشروعك؟</div><h2 id="services-title">خبرات مختلفة. وجهة واحدة.</h2></div><p>اختر الخدمة التي تناسب مرحلتك، وتابع كل تفاصيلها من حسابك.</p></div><div class="service-grid">${serviceCards()}</div></section><section class="brand-section"><div class="brand-copy"><div class="eyebrow">معك في كل مرحلة</div><h2>وضوح من أول اتفاق<br>إلى آخر تفصيلة.</h2><p>راجع عرض السعر والعقد، تابع مراحل التنفيذ، وشارك ملاحظاتك وملفاتك مع فريق العمل دون أن تفقد سياق مشروعك.</p><ul class="feature-list"><li>${icon("check")}عروض أسعار وعقود مرتبطة بكل طلب</li><li>${icon("check")}سجل مراحل ومرفقات في مكان واحد</li><li>${icon("check")}مساحة تواصل خاصة بمشروعك</li></ul></div><img class="brand-art" src="/assets/brand-original.jpeg" alt="شعار انطلاقة الأصلي، INTLAKAH Modern Digital Services" width="1408" height="768" loading="lazy"></section><section class="banner"><div><h2>المشروع القادم يبدأ بحديث.</h2><p>أخبرنا بفكرتك، وابدأ رحلتك مع انطلاقة.</p></div>${link("/start", "شاركنا فكرتك", "lime")}</section></div>`;
+}
+function pageHead(title, subtitle = "", action = "") {
+  return `<div class="page-head"><div><h1>${title}</h1>${subtitle ? `<p>${subtitle}</p>` : ""}</div>${action}</div>`;
+}
+function sidebar(path, admin = false) {
+  const items = admin
+    ? [
+        ["/admin", "نظرة عامة", "grid"],
+        ["/admin/orders", "الطلبات", "bag"],
+        ["/admin/products", "المنتجات الرقمية", "file"],
+        ["/admin/customers", "العملاء", "user"],
+        ["/support", "تذاكر الدعم", "message"],
+        ["/profile", "حسابي", "user"],
+      ]
+    : [
+        ["/dashboard", "نظرة عامة", "grid"],
+        ["/orders", "طلباتي", "bag"],
+        ["/contracts", "عقودي", "file"],
+        ["/invoices", "المدفوعات", "file"],
+        ["/notifications", "التحديثات", "bell"],
+        ["/support", "الدعم والمساعدة", "message"],
+        ["/profile", "إعدادات الحساب", "user"],
+      ];
+  return `<aside class="sidebar" aria-label="قائمة الحساب"><div class="sidebar-label">${admin ? "إدارة المنصة" : "مساحتك في انطلاقة"}</div>${items.map(([p, l, i]) => `<a href="#${p}" class="${path === p ? "active" : ""}" ${path === p ? 'aria-current="page"' : ""}>${icon(i)}${l}</a>`).join("")}<div class="divider"></div><button data-action="logout">${icon("logout")}تسجيل الخروج</button></aside>`;
+}
+function workspace(path, content) {
+  return `<div class="wrap workspace">${sidebar(path, state.user.role === "admin")}<div class="workspace-content">${content}</div></div>`;
+}
+function authPage(register, query) {
+  const next = query.get("next") || "/dashboard";
+  return `<div class="wrap"><div class="auth-layout"><div class="auth-story"><div class="eyebrow">مساحتك في انطلاقة</div><h2>كل ما يخص مشروعك،<br>أقرب إليك.</h2><p>حساب واحد يجمع طلباتك وعقودك وملفاتك وتواصلك مع الفريق.</p><div class="auth-points"><div class="auth-point">${icon("bag")} متابعة الطلبات والمشاريع</div><div class="auth-point">${icon("file")} عروض أسعار وعقود واضحة</div><div class="auth-point">${icon("message")} تواصل وملاحظات في مكان واحد</div></div></div><div class="auth-form"><h1>${register ? "أنشئ حسابك" : "أهلًا بعودتك"}</h1><p class="muted">${register ? "خطوتك الأولى نحو مشروعك القادم." : "سجّل الدخول لمتابعة مشروعك."}</p><form data-form="${register ? "register" : "login"}" data-next="${E(next)}">${errors()}${register ? field("name", "الاسم الكامل", "text", 'required minlength="2" maxlength="100" autocomplete="name"') : ""}${field("email", "البريد الإلكتروني", "email", 'required autocomplete="email" maxlength="180"')}${field("password", "كلمة المرور", "password", `required ${register ? 'minlength="12"' : ""} maxlength="128" autocomplete="${register ? "new-password" : "current-password"}"`)}${register ? `<p class="small muted">12 حرفًا على الأقل؛ يُفضّل استخدام عبارة طويلة يسهل عليك تذكرها.</p><label class="check"><input type="checkbox" name="acceptTerms" required><span>قرأت <a href="#/terms" target="_blank" rel="noopener">الشروط والأحكام</a> و<a href="#/privacy" target="_blank" rel="noopener">سياسة الخصوصية</a> وأوافق عليهما.</span></label>` : ""}<button class="btn" type="submit">${register ? "إنشاء الحساب" : "تسجيل الدخول"}</button></form><p class="auth-switch">${register ? "لديك حساب؟" : "جديد على انطلاقة؟"} <a href="#/${register ? "login" : "register"}?next=${encodeURIComponent(next)}">${register ? "سجّل الدخول" : "أنشئ حسابًا"}</a></p></div></div></div>`;
+}
+function authRequired(next) {
+  return `<div class="wrap">${pageHead("لنبدأ من حسابك", "احفظ تفاصيل مشروعك وتابع الردود والتحديثات.")}<div class="checkout">${empty("مساحتك الخاصة بالمشروع", "سجّل الدخول أو أنشئ حسابًا لتقديم الطلب ومتابعته بأمان.", `<div class="actions">${link("/login?next=" + encodeURIComponent(next), "تسجيل الدخول")}${link("/register?next=" + encodeURIComponent(next), "إنشاء حساب", "secondary")}</div>`)}</div></div>`;
+}
+function start(query) {
+  const selected = query.get("service") || "";
+  return `<div class="wrap">${pageHead("ابدأ مشروعك الإلكتروني", "كل مشروع ناجح يبدأ بفهم الفكرة. أخبرنا بما تخطط له.")}<div class="two-col"><section class="panel"><form data-form="start">${errors()}<div class="field"><label for="service">ما الخدمة التي تحتاجها؟</label><select id="service" name="service" required><option value="">اختر الخدمة</option>${state.config.services.map((s) => `<option value="${s.id}" ${s.id === selected ? "selected" : ""}>${s.title}</option>`).join("")}</select></div>${field("title", "اسم المشروع أو عنوان الطلب", "text", 'required minlength="3" maxlength="160" placeholder="مثل: متجر لمنتجات العناية"')}${textarea("description", "حدّثنا عن فكرتك", 'required minlength="15" maxlength="8000" placeholder="ما الذي تريد بناءه؟ من سيستخدمه؟ وما أهم ما تتوقعه؟"')}<div class="form-grid">${field("budget", "الميزانية المتوقعة (اختياري)", "text", 'maxlength="100" placeholder="مثل: من 5,000 إلى 10,000 ر.س"')}${field("targetDate", "موعد الإطلاق المستهدف (اختياري)", "date")}</div><button class="btn" type="submit">إرسال طلب المشروع</button></form></section><aside><section class="panel"><div class="service-icon">${icon("spark")}</div><h2>ماذا يحدث بعد الإرسال؟</h2><ol class="feature-list"><li><strong>01</strong> نراجع الفكرة والتفاصيل.</li><li><strong>02</strong> نتواصل معك لاستكمال المتطلبات.</li><li><strong>03</strong> يصلك عرض سعر وعقد للمراجعة.</li><li><strong>04</strong> نبدأ التنفيذ بعد الاتفاق وتأكيد الدفع.</li></ol></section><div class="notice">إرسال الطلب لا يلزمك بالدفع. ستراجع نطاق العمل والسعر قبل الموافقة.</div></aside></div></div>`;
+}
+function ordersTable(orders, admin = false) {
+  if (!orders.length)
+    return empty(
+      "لا توجد طلبات بعد",
+      "ستظهر هنا طلبات المشاريع ومشتريات المنتجات الرقمية.",
+      link("/start", "ابدأ أول مشروع"),
+    );
+  return `<div class="table-wrap"><table><thead><tr><th>الطلب</th>${admin ? "<th>العميل</th>" : ""}<th>الحالة</th><th>القيمة</th><th>التاريخ</th><th><span class="sr-only">التفاصيل</span></th></tr></thead><tbody>${orders.map((o) => `<tr><td><a href="#/order/${o.id}">${E(o.title)}</a><div class="muted" dir="ltr">${E(o.number)}</div></td>${admin ? `<td>${E(o.customer.name)}</td>` : ""}<td>${badge(o)}</td><td class="money">${o.amount ? money(o.amount) : "لم يُحدّد بعد"}</td><td>${date(o.createdAt)}</td><td><a class="text-link" href="#/order/${o.id}">عرض</a></td></tr>`).join("")}</tbody></table></div>`;
+}
+async function dashboard(path) {
+  const admin = state.user.role === "admin";
+  const orders = await api("/api/orders" + (admin ? "?all=1" : ""));
+  let summary = admin
+    ? await api("/api/admin/summary")
+    : {
+        orders: orders.length,
+        active: orders.filter(
+          (o) => !["completed", "cancelled"].includes(o.status),
+        ).length,
+        completed: orders.filter((o) => o.status === "completed").length,
+        contracts: orders.filter((o) => o.currentContract).length,
+      };
+  const tiles = admin
+    ? [
+        [summary.active, "طلبات نشطة"],
+        [summary.customers, "عميل مسجّل"],
+        [money(summary.revenue), "مبالغ مؤكدة"],
+        [summary.openTickets, "تذاكر مفتوحة"],
+      ]
+    : [
+        [summary.active, "مشاريع وطلبات نشطة"],
+        [summary.completed, "طلبات مكتملة"],
+        [summary.contracts, "عقود وعروض"],
+        [summary.orders, "إجمالي الطلبات"],
+      ];
+  return workspace(
+    path,
+    `${pageHead(admin ? "لوحة إدارة انطلاقة" : `أهلًا، ${E(state.user.name.split(" ")[0])}`, "متابعة واضحة لكل ما يحتاج انتباهك.", link(admin ? "/admin/products" : "/start", admin ? "إدارة المنتجات" : "مشروع جديد"))}<div class="stats">${tiles.map(([v, l], i) => `<div class="stat ${i === 0 ? "featured" : ""}"><span class="value">${v}</span><span class="label">${l}</span></div>`).join("")}</div><div class="section-head"><h2>أحدث الطلبات</h2><a class="text-link" href="#${admin ? "/admin/orders" : "/orders"}">عرض جميع الطلبات</a></div>${ordersTable(orders.slice(0, 6), admin)}${!admin ? `<div class="banner"><div><h2>للفكرة التالية مساحة.</h2><p>اكتشف الخدمات التي تدعم خطوتك القادمة.</p></div>${link("/services", "تصفّح الخدمات", "lime")}</div>` : ""}`,
+  );
+}
+async function orderList(path) {
+  const admin = path.startsWith("/admin");
+  const orders = await api("/api/orders" + (admin ? "?all=1" : ""));
+  return workspace(
+    path,
+    `${pageHead(admin ? "إدارة الطلبات" : "طلباتي", "طلبات الخدمات ومشترياتك الرقمية.", !admin ? link("/start", "طلب جديد") : "")}<div class="filter-row"><label class="sr-only" for="order-search">ابحث في الطلبات</label><input class="filter-input" id="order-search" type="search" placeholder="ابحث بالعنوان أو رقم الطلب" data-filter="orders"></div><div id="orders-list">${ordersTable(orders, admin)}</div>`,
+  );
+}
+function progress(o) {
+  const keys = [
+    "received",
+    "quoted",
+    "awaiting_payment",
+    "in_progress",
+    "final_review",
+    "completed",
+  ];
+  const labels = [
+    "استلام الطلب",
+    "العرض والاتفاق",
+    "الدفع",
+    "التنفيذ",
+    "المراجعة",
+    "التسليم",
+  ];
+  let idx = keys.indexOf(o.status);
+  if (o.status === "reviewing") idx = 0;
+  if (o.status === "paid") idx = 2;
+  return `<div class="progress-steps">${keys.map((k, i) => `<div class="progress-step ${i <= idx ? "done" : ""}">${labels[i]}</div>`).join("")}</div>`;
+}
+function contractCard(q, o, history = false) {
+  return `<div class="quote"><div class="quote-head"><div><h3>الاتفاق والعقد · الإصدار ${q.version}</h3><span class="muted small">${date(q.createdAt)}</span></div><div class="quote-price">${money(q.amount)}</div></div><h3>نطاق الاتفاق</h3><p class="pre">${E(q.agreement)}</p><div class="key-values"><div><span>تاريخ التسليم</span><strong>${date(q.deliveryDate)}</strong></div><div><span>الموافقة</span><strong>${q.acceptedAt ? "وافق العميل في " + date(q.acceptedAt) : "بانتظار موافقة العميل"}</strong></div></div><details><summary>الشروط المتفق عليها</summary><p class="pre spaced">${E(q.terms)}</p><a class="text-link small" href="#/privacy" target="_blank" rel="noopener">سياسة الخصوصية</a></details>${!history && state.user.id === o.owner && o.status === "quoted" && !q.acceptedAt ? `<form class="spaced" data-form="accept" data-id="${o.id}" data-contract="${q.id}">${errors()}<label class="check"><input name="accept" type="checkbox" required><span>قرأت الاتفاق والسعر وموعد التسليم والشروط وسياسة الخصوصية وأوافق عليها.</span></label><button type="submit" class="btn">الموافقة على العرض والعقد</button></form>` : ""}</div>`;
+}
+function paymentCard(o) {
+  if (!o.amount) return "";
+  return `<section class="panel"><h2>ملخص الدفع</h2><p class="amount-large">${money(o.amount)}</p>${o.payment?.confirmed && !o.payment.revoked ? `<div class="notice">تم تأكيد استلام الدفع في ${date(o.payment.at)}.</div>${link("/invoice/" + o.id, "عرض إيصال الدفع", "secondary")}${o.type === "product" ? `<a class="btn spaced" href="/api/orders/${o.id}/download">${icon("download")} تنزيل المنتج</a>` : ""}` : o.status === "awaiting_payment" ? `<p class="small muted">نسّق تفاصيل الدفع مع الفريق داخل محادثة الطلب. يمكنك إرفاق إثبات التحويل للمراجعة.</p><div class="notice warning">رفع الإثبات لا يعني تأكيد الدفع؛ يظهر التأكيد بعد مراجعة الإدارة.</div>` : `<p class="small muted">${o.payment?.revoked ? "أُلغي استحقاق هذه الدفعة. راجع فريق الدعم." : "يأتي الدفع بعد اعتماد العرض والعقد."}</p>`}</section>`;
+}
+function adminOrderControls(o) {
+  if (state.user.role !== "admin") return "";
+  const transitions = {
+    received: ["reviewing", "cancelled"],
+    reviewing: ["cancelled"],
+    quoted: ["cancelled"],
+    awaiting_payment: ["cancelled"],
+    paid: ["in_progress"],
+    in_progress: ["final_review"],
+    final_review: ["in_progress", "completed"],
+  };
+  const options = transitions[o.status] || [];
+  return `<section class="panel"><h2>إجراءات الإدارة</h2>${options.length ? `<form data-form="status" data-id="${o.id}">${errors()}<div class="field"><label for="status">المرحلة التالية</label><select id="status" name="status">${options.map((s) => `<option value="${s}">${statuses[s]}</option>`).join("")}</select></div>${field("note", "تحديث يظهر للعميل", "text", 'maxlength="1000"')}<button class="btn secondary" type="submit">تحديث المرحلة</button></form>` : '<p class="small muted">لا يوجد انتقال متاح لهذه المرحلة.</p>'}${o.status === "awaiting_payment" ? `<form data-form="confirm-payment" data-id="${o.id}" class="spaced"><h3>تأكيد استلام ${money(o.amount)}</h3>${errors()}${field("reference", "مرجع التحويل أو التحصيل", "text", 'required minlength="3" maxlength="150"')}<label class="check"><input type="checkbox" required><span>تحققت فعليًا من استلام المبلغ.</span></label><button class="btn" type="submit">تسجيل الدفع المؤكد</button></form>` : ""}${o.payment?.confirmed && !o.payment.revoked ? `<details class="spaced"><summary>إلغاء استحقاق الدفع</summary><form data-form="revoke-payment" data-id="${o.id}" class="spaced">${errors()}${textarea("reason", "سبب الإلغاء", 'required minlength="5" maxlength="500"')}<p class="small muted">يسحب صلاحية تنزيل المنتج ويلغي الطلب. لا ينفّذ استردادًا ماليًا من البنك.</p><label class="check"><input type="checkbox" required><span>أؤكد إلغاء الاستحقاق لهذا الطلب.</span></label><button class="btn danger" type="submit">إلغاء الاستحقاق</button></form></details>` : ""}</section>`;
+}
+async function orderDetail(path, oid) {
+  const o = await api("/api/orders/" + oid),
+    q = o.contracts.find((q) => q.id === o.currentContract);
+  return workspace(
+    path,
+    `<div class="breadcrumb"><a href="#${state.user.role === "admin" ? "/admin/orders" : "/orders"}">الطلبات</a><span>/</span><span dir="ltr">${E(o.number)}</span></div>${pageHead(E(o.title), `${o.type === "product" ? "طلب منتج رقمي" : "طلب خدمة"} · ${date(o.createdAt)}`, badge(o))}${o.type === "service" ? progress(o) : ""}<div class="two-col"><div><section class="panel"><h2>تفاصيل الطلب</h2><p class="pre">${E(o.description)}</p><div class="key-values"><div><span>صاحب الطلب</span><strong>${E(o.customer.name)}</strong></div><div><span>الميزانية المذكورة</span><strong>${E(o.budget || "غير محددة")}</strong></div></div></section>${
+      q
+        ? `<section class="panel"><h2>العرض والعقد</h2>${contractCard(q, o)}${
+            o.contracts.length > 1
+              ? `<details class="spaced"><summary>الإصدارات السابقة (${o.contracts.length - 1})</summary>${o.contracts
+                  .filter((x) => x.id !== o.currentContract)
+                  .map(
+                    (x) =>
+                      `<div class="spaced">${contractCard(x, o, true)}</div>`,
+                  )
+                  .join("")}</details>`
+              : ""
+          }</section>`
+        : ""
+    }${state.user.role === "admin" && o.type === "service" && (!o.payment?.confirmed || o.payment.revoked) && o.status !== "cancelled" ? `<section class="panel"><h2>${q ? "إصدار عرض جديد" : "إعداد عرض السعر والعقد"}</h2><form data-form="quote" data-id="${o.id}">${errors()}${textarea("agreement", "الاتفاق ونطاق العمل", 'required minlength="10" maxlength="10000"')}${field("amount", "السعر النهائي (ر.س)", "number", 'required min="1" max="1000000" step="0.01"')}${field("deliveryDate", "تاريخ التسليم", "date", "required")}${textarea("terms", "شروط الاتفاق", 'required minlength="10" maxlength="10000"')}<div class="notice">يحفظ كل إصدار بشكل مستقل؛ إصدار عرض جديد يحتاج موافقة جديدة من العميل.</div><button class="btn" type="submit">إرسال العرض للعميل</button></form></section>` : ""}<section class="panel"><h2>محادثة الطلب</h2>${o.messages.length ? o.messages.map((x) => `<div class="message ${x.role === "admin" ? "admin" : ""}"><div class="message-meta"><strong>${E(x.by)}${x.role === "admin" ? " · فريق انطلاقة" : ""}</strong><span>${time(x.at)}</span></div><p class="pre">${E(x.message)}</p></div>`).join("") : '<p class="muted small">أضف سؤالًا أو ملاحظة لفريق العمل.</p>'}<form data-form="message" data-id="${o.id}" class="spaced">${errors()}${textarea("message", "رسالتك", 'required maxlength="4000"')}<button class="btn" type="submit">إرسال الرسالة</button></form></section><section class="panel"><h2>المرفقات</h2>${o.files.map((f) => `<div class="file-row"><div class="file-info"><strong>${E(f.name)}</strong><small>${E(f.by)} · ${(f.size / 1024).toFixed(0)} KB</small></div><a class="btn secondary small" href="/api/orders/${o.id}/files/${f.id}">${icon("download")} تنزيل</a></div>`).join("") || '<p class="small muted">لا توجد مرفقات بعد.</p>'}<form class="spaced" data-form="order-file" data-id="${o.id}">${errors()}<div class="field"><label for="attachment">إضافة ملف أو إثبات دفع</label><input class="file-input" id="attachment" name="file" type="file" accept=".pdf,.png,.jpg,.jpeg" required><p class="hint">PDF أو PNG أو JPEG، حتى 10 ميجابايت. الملفات متاحة لك وللإدارة فقط.</p></div><button class="btn secondary" type="submit">رفع المرفق</button></form></section></div><aside>${paymentCard(o)}${adminOrderControls(o)}<section class="panel"><h2>سجل المشروع</h2><ul class="timeline">${[
+      ...o.events,
+    ]
+      .reverse()
+      .map(
+        (ev) =>
+          `<li><strong>${E(ev.message)}</strong><small>${date(ev.at)} · ${E(ev.actor)}</small></li>`,
+      )
+      .join("")}</ul></section></aside></div>`,
+  );
+}
+async function store() {
+  const products = await api("/api/products");
+  return `<div class="wrap">${pageHead("المتجر الرقمي", "موارد ومنتجات تساعدك على تطوير مشروعك.")}<div class="notice">تظهر هنا المنتجات المتاحة بملفاتها وأسعارها المعتمدة. تحصل على رابط التنزيل في حسابك بعد تأكيد الدفع.</div>${products.length ? `<div class="three-col">${products.map((p) => `<article class="panel product-card"><div class="product-cover">${icon("file")}<span class="badge">${E(p.category)}</span></div><h2>${E(p.title)}</h2><p class="pre">${E(p.description)}</p><div class="price">${money(p.amount)}</div>${link("/checkout/" + p.id, "عرض وطلب المنتج")}</article>`).join("")}</div>` : empty("المنتجات تُجهّز حاليًا", "لم تُنشر منتجات للبيع بعد. يمكنك الآن طلب خدمة تناسب مشروعك.", link("/services", "استكشف الخدمات"))}</div>`;
+}
+async function checkout(pid) {
+  const products = await api("/api/products"),
+    p = products.find((p) => p.id === pid);
+  if (!p) throw Error("المنتج غير متاح حاليًا.");
+  return `<div class="wrap"><div class="checkout">${pageHead("مراجعة طلب المنتج", "راجع تفاصيل المنتج قبل إنشاء الطلب.")}<section class="panel"><div class="product-cover">${icon("file")}<span class="badge">${E(p.category)}</span></div><h2>${E(p.title)}</h2><p class="pre">${E(p.description)}</p><div class="invoice-total"><span>الإجمالي</span><span>${money(p.amount)}</span></div><form class="spaced" data-form="checkout" data-id="${p.id}">${errors()}<div class="notice">ينشئ هذا الزر طلب شراء فقط. تُنسَّق طريقة الدفع مع الفريق، ويُتاح التنزيل بعد تأكيد الاستلام.</div><label class="check"><input name="acceptTerms" type="checkbox" required><span>اطلعت على وصف المنتج والسعر و<a href="#/terms" target="_blank" rel="noopener">شروط الشراء</a> وأوافق عليها.</span></label><button class="btn" type="submit">إنشاء طلب الشراء</button></form></section></div></div>`;
+}
+async function contracts(path) {
+  const orders = (await api("/api/orders")).filter((o) => o.contracts.length);
+  return workspace(
+    path,
+    `${pageHead("العقود وعروض الأسعار", "راجع الاتفاقات المعروضة عليك والإصدارات المحفوظة.")}${
+      orders.length
+        ? orders
+            .map(
+              (o) =>
+                `<section class="panel"><div class="section-head"><h2>${E(o.title)}</h2>${link("/order/" + o.id, "فتح الطلب", "secondary small")}</div>${contractCard(
+                  o.contracts.find((q) => q.id === o.currentContract),
+                  o,
+                )}</section>`,
+            )
+            .join("")
+        : empty(
+            "لا توجد عقود بعد",
+            "عندما يصدر الفريق عرض سعر، سيظهر هنا للاطلاع والموافقة.",
+          )
+    }`,
+  );
+}
+async function invoices(path) {
+  const orders = (await api("/api/orders")).filter((o) => o.amount);
+  return workspace(
+    path,
+    `${pageHead("المدفوعات", "قيم طلباتك وإيصالات المبالغ المؤكدة.")}${orders.length ? `<div class="table-wrap"><table><thead><tr><th>الطلب</th><th>المبلغ</th><th>الحالة</th><th>المستند</th></tr></thead><tbody>${orders.map((o) => `<tr><td><a href="#/order/${o.id}">${E(o.title)}</a></td><td>${money(o.amount)}</td><td>${o.payment?.confirmed && !o.payment.revoked ? "تم التأكيد" : o.payment?.revoked ? "أُلغي الاستحقاق" : "غير مدفوع"}</td><td>${o.payment?.confirmed ? `<a class="text-link" href="#/invoice/${o.id}">إيصال الدفع</a>` : "—"}</td></tr>`).join("")}</tbody></table></div>` : empty("لا توجد مدفوعات بعد", "ستظهر قيمة كل طلب هنا بعد إصدار العرض أو طلب منتج.")}`,
+  );
+}
+async function invoice(oid) {
+  const o = await api("/api/orders/" + oid);
+  if (!o.payment?.confirmed) throw Error("لا يوجد إيصال دفع مؤكد لهذا الطلب.");
+  return `<div class="wrap"><article class="invoice"><div class="invoice-head"><div class="brand">انطلاقة<small>INTLAKAH</small></div><div><h1>إيصال استلام دفع</h1><div class="small muted" dir="ltr">${E(o.payment.invoiceNumber)}</div></div></div>${o.payment.revoked ? '<div class="notice warning">هذا الاستحقاق ملغى؛ لا يُستخدم كإثبات لدفعة فعالة.</div>' : ""}<div class="key-values"><div><span>العميل</span><strong>${E(o.customer.name)}</strong><p class="small">${E(o.customer.email)}</p></div><div><span>تاريخ الاستلام</span><strong>${date(o.payment.at)}</strong></div><div><span>رقم الطلب</span><strong dir="ltr">${E(o.number)}</strong></div><div><span>مرجع الدفع</span><strong>${E(o.payment.reference)}</strong></div></div><div class="table-wrap spaced"><table><thead><tr><th>الوصف</th><th>القيمة</th></tr></thead><tbody><tr><td>${E(o.title)}</td><td>${money(o.payment.amount)}</td></tr></tbody></table></div><div class="invoice-total"><span>المبلغ المستلم</span><span>${money(o.payment.amount)}</span></div><p class="small muted spaced">يوثق هذا الإيصال المبلغ الذي أكدته الإدارة، ولا يُعد فاتورة ضريبية.</p><div class="button-row spaced no-print"><button class="btn" data-action="print">طباعة الإيصال</button>${link("/order/" + o.id, "العودة إلى الطلب", "secondary")}</div></article></div>`;
+}
+async function notifications(path) {
+  const orders = await api("/api/orders");
+  const events = orders
+    .flatMap((o) =>
+      o.events.map((ev) => ({ ...ev, orderId: o.id, title: o.title })),
+    )
+    .sort((a, b) => b.at.localeCompare(a.at));
+  return workspace(
+    path,
+    `${pageHead("تحديثات مشاريعك", "آخر المستجدات المسجلة على طلباتك.")}${
+      events.length
+        ? `<section class="panel"><ul class="timeline">${events
+            .slice(0, 100)
+            .map(
+              (ev) =>
+                `<li><strong>${E(ev.message)}</strong><a class="text-link small" href="#/order/${ev.orderId}">${E(ev.title)}</a><br><small>${time(ev.at)}</small></li>`,
+            )
+            .join("")}</ul></section>`
+        : empty(
+            "لا توجد تحديثات بعد",
+            "ستظهر هنا مراحل مشاريعك ورسائل تحديث الطلبات.",
+          )
+    }`,
+  );
+}
+async function support(path) {
+  const tickets = await api("/api/tickets");
+  return workspace(
+    path,
+    `${pageHead(state.user.role === "admin" ? "تذاكر الدعم" : "الدعم والمساعدة", "محادثة خاصة لمتابعة سؤالك مع الفريق.")}<div class="two-col"><section class="panel"><h2>التذاكر</h2>${tickets.length ? tickets.map((t) => `<details class="ticket"><summary><span class="ticket-head"><strong>${E(t.subject)}</strong><span class="badge ${t.status === "closed" ? "completed" : "received"}">${t.status === "closed" ? "مغلقة" : "مفتوحة"}</span></span><span class="small muted">${E(t.name)} · ${date(t.createdAt)}</span></summary><div class="spaced">${t.messages.map((m) => `<div class="message ${m.role === "admin" ? "admin" : ""}"><div class="message-meta"><strong>${E(m.by)}</strong><span>${date(m.at)}</span></div><p class="pre">${E(m.message)}</p></div>`).join("")}<form data-form="ticket-reply" data-id="${t.id}">${errors()}${textarea("message", "إضافة رد", 'required maxlength="5000"')}${state.user.role === "admin" ? `<div class="field"><label for="ticket-status-${t.id}">حالة التذكرة</label><select id="ticket-status-${t.id}" name="status"><option value="open" ${t.status === "open" ? "selected" : ""}>مفتوحة</option><option value="closed" ${t.status === "closed" ? "selected" : ""}>مغلقة</option></select></div>` : ""}<button class="btn" type="submit">إرسال الرد</button></form></div></details>`).join("") : '<p class="muted">لا توجد تذاكر حتى الآن.</p>'}</section><section class="panel"><h2>تذكرة جديدة</h2><form data-form="ticket">${errors()}${field("subject", "عنوان السؤال", "text", 'required minlength="3" maxlength="180"')}${textarea("message", "كيف يمكننا مساعدتك؟", 'required minlength="10" maxlength="5000"')}<button class="btn" type="submit">إرسال التذكرة</button></form></section></div>`,
+  );
+}
+function profile(path) {
+  return workspace(
+    path,
+    `${pageHead("إعدادات الحساب", "بيانات حسابك ووسائل حمايته.")}<div class="two-col"><div><section class="panel"><h2>بياناتك</h2><div class="key-values"><div><span>الاسم</span><strong>${E(state.user.name)}</strong></div><div><span>البريد الإلكتروني</span><strong>${E(state.user.email)}</strong></div><div><span>تاريخ الانضمام</span><strong>${date(state.user.createdAt)}</strong></div><div><span>الجوال</span><strong>${state.user.phoneVerified ? E(state.user.phone) + " · موثّق" : "لم يتم توثيقه"}</strong></div></div></section><section class="panel"><h2>تغيير كلمة المرور</h2><form data-form="password">${errors()}${field("currentPassword", "كلمة المرور الحالية", "password", 'required autocomplete="current-password" maxlength="128"')}${field("password", "كلمة المرور الجديدة", "password", 'required minlength="12" maxlength="128" autocomplete="new-password"')}<p class="small muted">تغيير كلمة المرور ينهي الجلسات الأخرى المفتوحة لحسابك.</p><button class="btn" type="submit">حفظ كلمة المرور</button></form></section></div><section class="panel"><h2>توثيق رقم الجوال</h2>${state.config.smsReady ? `<p class="small muted">أضف رقمك بصيغته الدولية، ثم أدخل رمز الرسالة.</p><form data-form="phone-send">${errors()}${field("phone", "رقم الجوال", "tel", 'required placeholder="+9665XXXXXXXX" autocomplete="tel"')}<button class="btn secondary" type="submit">إرسال رمز التحقق</button></form>${state.challenge ? `<form class="spaced" data-form="phone-check">${errors()}${field("code", "رمز التحقق", "text", 'required inputmode="numeric" autocomplete="one-time-code" minlength="4" maxlength="10"')}<button class="btn" type="submit">تأكيد الرقم</button></form>` : ""}` : '<p class="muted">التحقق برسائل الجوال غير مفعّل حاليًا. يمكنك استخدام حسابك بالبريد وكلمة المرور.</p>'}</section></div>`,
+  );
+}
+async function adminProducts(path) {
+  const products = await api("/api/admin/products");
+  return workspace(
+    path,
+    `${pageHead("إدارة المنتجات الرقمية", "لا يظهر المنتج للبيع إلا بعد رفع ملفه ونشره.")}<div class="two-col"><section><div class="panel"><h2>المنتجات الحالية</h2>${products.length ? products.map((p) => `<article class="ticket"><div class="ticket-head"><h3>${E(p.title)}</h3><span class="badge ${p.published ? "completed" : "reviewing"}">${p.published ? "منشور" : "مسودة"}</span></div><p class="small muted">${E(p.category)} · ${money(p.amount)}</p><p class="small pre">${E(p.description)}</p><p class="small">${p.file ? "الملف: " + E(p.file.name) : "لم يُرفع ملف المنتج بعد."}</p><form data-form="product-file" data-id="${p.id}">${errors()}<div class="field"><label for="file-${p.id}">ملف المنتج</label><input id="file-${p.id}" class="file-input" name="file" type="file" accept=".pdf,.jpg,.jpeg,.png" required><p class="hint">PDF أو PNG أو JPEG، بحد أقصى 10 ميجابايت.</p></div><button class="btn secondary small" type="submit">${p.file ? "تحديث الملف" : "رفع الملف"}</button></form><button class="btn small spaced ${p.published ? "secondary" : ""}" data-action="publish-product" data-id="${p.id}" data-published="${!p.published}" ${!p.file ? "disabled" : ""}>${p.published ? "إخفاء من المتجر" : "نشر في المتجر"}</button><details class="spaced"><summary>تعديل بيانات المنتج</summary><form class="spaced" data-form="product-edit" data-id="${p.id}">${errors()}${field("title", "عنوان المنتج", "text", `required minlength="3" maxlength="140" value="${E(p.title)}"`)}${field("category", "التصنيف", "text", `required minlength="2" maxlength="60" value="${E(p.category)}"`)}<div class="field"><label>وصف المنتج<textarea name="description" required minlength="10" maxlength="5000">${E(p.description)}</textarea></label></div>${field("amount", "السعر (ر.س)", "number", `required min="1" step="0.01" value="${p.amount / 100}"`)}<button class="btn small" type="submit">حفظ التعديل</button></form></details></article>`).join("") : '<p class="muted">لا توجد منتجات. أضف المنتج الأول مع ملف حقيقي قابل للتسليم.</p>'}</div></section><section class="panel"><h2>إضافة منتج</h2><form data-form="product">${errors()}${field("title", "اسم المنتج", "text", 'required minlength="3" maxlength="140"')}${field("category", "التصنيف", "text", 'required minlength="2" maxlength="60" placeholder="مثل: دليل عمل"')}${textarea("description", "وصف المنتج ومحتواه", 'required minlength="10" maxlength="5000"')}${field("amount", "السعر النهائي (ر.س)", "number", 'required min="1" max="1000000" step="0.01"')}<button class="btn" type="submit">حفظ مسودة المنتج</button></form></section></div>`,
+  );
+}
+async function customers(path) {
+  const users = await api("/api/admin/customers");
+  return workspace(
+    path,
+    `${pageHead("العملاء", "الحسابات المسجلة في المنصة.")}<div class="table-wrap"><table><thead><tr><th>الاسم</th><th>البريد</th><th>الجوال</th><th>تاريخ التسجيل</th></tr></thead><tbody>${
+      users
+        .filter((u) => u.role === "customer")
+        .map(
+          (u) =>
+            `<tr><td>${E(u.name)}</td><td>${E(u.email)}</td><td>${u.phoneVerified ? E(u.phone) : "غير موثّق"}</td><td>${date(u.createdAt)}</td></tr>`,
+        )
+        .join("") ||
+      '<tr><td colspan="4">لا توجد حسابات عملاء حتى الآن.</td></tr>'
+    }</tbody></table></div>`,
+  );
+}
+function about() {
+  return `<div class="wrap">${pageHead("عن انطلاقة", "خدمات رقمية تساند مشروعك في كل مرحلة.")}<section class="brand-section"><div><div class="eyebrow">من الفكرة إلى التشغيل</div><h2>نبني ما يحتاجه<br>مشروعك لينطلق.</h2><p class="muted">تجمع انطلاقة خدمات البرمجة والتجارة الإلكترونية والتسويق وصناعة المحتوى. نبدأ بفهم احتياجك، ونتفق على نطاق واضح، ثم نتابع التنفيذ معك حتى التسليم.</p>${link("/start", "ابدأ الحديث عن مشروعك")}</div><img class="brand-art" src="/assets/brand-original.jpeg" alt="شعار انطلاقة الأصلي" width="1408" height="768"></section><section class="section"><div class="steps"><div class="step"><div class="step-num">01</div><h3>فهم الاحتياج</h3><p class="muted">هدف المشروع والجمهور والنتيجة المتوقعة.</p></div><div class="step"><div class="step-num">02</div><h3>اتفاق واضح</h3><p class="muted">نطاق العمل والسعر والمدة قبل بدء التنفيذ.</p></div><div class="step"><div class="step-num">03</div><h3>تنفيذ ومتابعة</h3><p class="muted">تحديثات ومراجعات ومرفقات مرتبطة بمشروعك.</p></div><div class="step"><div class="step-num">04</div><h3>مراجعة وتسليم</h3><p class="muted">مراجعة المخرجات وإنهاء الاتفاق بصورة واضحة.</p></div></div></section></div>`;
+}
+function legal(privacy) {
+  return `<div class="wrap"><article class="legal panel"><div class="eyebrow">انطلاقة</div><h1>${privacy ? "سياسة الخصوصية" : "الشروط والأحكام"}</h1>${privacy ? `<h2>ما الذي نحفظه؟</h2><p>نحفظ الاسم والبريد الإلكتروني وبيانات الحساب، وتفاصيل الطلبات والعقود والموافقات، والرسائل والمرفقات وبيانات الدفع التي تسجلها الإدارة. عند توثيق رقم الجوال نحفظ الرقم وحالة التوثيق.</p><h2>لماذا نستخدم هذه البيانات؟</h2><p>لإدارة حسابك وتنفيذ طلباتك والرد على استفساراتك وحماية الوصول إلى ملفاتك. لا تعرض المنصة طلباتك ومرفقاتك للزوار أو العملاء الآخرين.</p><h2>من يصل إليها؟</h2><p>صاحب الحساب وإدارة انطلاقة بحسب الحاجة إلى تنفيذ الخدمة. عند تفعيل التحقق بالجوال يُرسل رقمك إلى مزود الرسائل لإرسال رمز التحقق. تخزَّن البيانات لدى مزود الاستضافة.</p><h2>ملفات الارتباط</h2><p>نستخدم ملف ارتباط ضروريًا لتسجيل الدخول وحماية الجلسة. تنتهي الجلسة عند تسجيل الخروج أو بعد انتهاء مدتها.</p><h2>طلبات الخصوصية</h2><p>يمكنك طلب مراجعة بياناتك أو تصحيحها أو حذفها عبر تذكرة دعم داخل حسابك. تخضع بيانات الطلبات والعقود المكتملة للحاجة إلى حفظ سجل التعامل.</p>` : `<h2>الحساب واستخدام المنصة</h2><p>استخدم معلومات صحيحة وحافظ على سرية كلمة المرور. لا ترفع محتوى لا تملك حق استخدامه، أو ملفات ضارة أو بيانات شخصية لا تحتاجها الخدمة.</p><h2>طلبات الخدمات</h2><p>إرسال طلب مشروع لا ينشئ التزامًا بالدفع. يتحدد نطاق العمل والسعر وموعد التسليم في العرض والعقد الذي تراجعه وتوافق عليه داخل حسابك.</p><h2>الموافقات والتعديلات</h2><p>تُحفظ موافقتك مع وقتها وإصدار الاتفاق. تغيير نطاق العمل أو السعر يحتاج اتفاقًا جديدًا. تبقى الإصدارات السابقة محفوظة في الطلب.</p><h2>المنتجات الرقمية والدفع</h2><p>راجع وصف المنتج والسعر قبل إنشاء الطلب. تتاح الملفات في حسابك بعد تأكيد الإدارة استلام الدفع. رفع إثبات التحويل لا يُعد تأكيدًا تلقائيًا للدفع.</p><h2>المراجعة والاسترداد</h2><p>إذا واجهت مشكلة في المنتج أو الخدمة، افتح تذكرة دعم توضح المشكلة ورقم الطلب لمراجعتها وفق الاتفاق والحقوق النظامية.</p><h2>حقوق الاستخدام</h2><p>تُحدد حقوق استخدام مخرجات الخدمة في الاتفاق. لا يجوز إعادة بيع الملفات الرقمية أو توزيعها إلا إذا كان وصف المنتج أو اتفاق منفصل يجيز ذلك.</p>`}<h2>التواصل</h2><p>للاستفسار عن هذه السياسة أو طلب المساعدة، استخدم <a class="text-link" href="#/support">الدعم والمساعدة</a>${state.config.businessEmail ? " أو البريد " + E(state.config.businessEmail) : ""}.</p></article></div>`;
+}
+
+async function render() {
+  const seq = ++state.sequence;
+  const raw = location.hash.slice(1) || "/";
+  const [path, search = ""] = raw.split("?");
+  const query = new URLSearchParams(search);
+  header(path);
+  main.innerHTML =
+    '<div class="page-loading" role="status">جارٍ التحميل…</div>';
+  try {
+    const privateRoute =
+      [
+        "/start",
+        "/dashboard",
+        "/orders",
+        "/contracts",
+        "/invoices",
+        "/notifications",
+        "/support",
+        "/profile",
+      ].includes(path) || /^\/(order|invoice|checkout|admin)(\/|$)/.test(path);
+    let html;
+    if (privateRoute && !state.user) html = authRequired(raw);
+    else if (path.startsWith("/admin") && state.user?.role !== "admin")
+      throw Error("هذه المساحة متاحة لإدارة المنصة فقط.");
+    else if (path === "/") html = home();
+    else if (path === "/services")
+      html = `<div class="wrap">${pageHead("خدمات تدعم خطوتك القادمة", "من بناء حضورك الرقمي إلى الوصول إلى جمهورك.")}<section class="section"><div class="service-grid">${serviceCards()}</div></section></div>`;
+    else if (path === "/about") html = about();
+    else if (path === "/login" || path === "/register") {
+      html = authPage(path === "/register", query);
+      if (path === "/login" && state.config.smsReady)
+        html = html.replace(
+          '<p class="auth-switch">',
+          `<p class="auth-switch"><a href="#/otp-login?next=${encodeURIComponent(query.get("next") || "/dashboard")}">الدخول برمز الجوال</a></p><p class="auth-switch">`,
+        );
+    } else if (path === "/otp-login")
+      html = `<div class="wrap"><div class="checkout">${pageHead("الدخول برمز الجوال", "للأرقام الموثّقة مسبقًا في حساب انطلاقة.")}<section class="panel">${state.config.smsReady ? `<form data-form="otp-send">${errors()}${field("phone", "رقم الجوال", "tel", 'required placeholder="+9665XXXXXXXX" autocomplete="tel"')}<button class="btn" type="submit">إرسال رمز الدخول</button></form>${state.loginChallenge ? `<form data-form="otp-check" class="spaced" data-next="${E(query.get("next") || "/dashboard")}">${errors()}${field("code", "رمز التحقق", "text", 'required inputmode="numeric" autocomplete="one-time-code" minlength="4" maxlength="10"')}<button class="btn" type="submit">تسجيل الدخول</button></form>` : ""}` : "<p>الدخول برمز الجوال غير مفعّل حاليًا.</p>"}<p class="small spaced"><a class="text-link" href="#/login">الدخول بالبريد وكلمة المرور</a></p></section></div></div>`;
+    else if (path === "/start") html = start(query);
+    else if (path === "/dashboard" || path === "/admin")
+      html = await dashboard(path);
+    else if (path === "/orders" || path === "/admin/orders")
+      html = await orderList(path);
+    else if (path.startsWith("/order/"))
+      html = await orderDetail(path, path.split("/")[2]);
+    else if (path === "/store") html = await store();
+    else if (path.startsWith("/checkout/"))
+      html = await checkout(path.split("/")[2]);
+    else if (path === "/contracts") html = await contracts(path);
+    else if (path === "/invoices") html = await invoices(path);
+    else if (path.startsWith("/invoice/"))
+      html = await invoice(path.split("/")[2]);
+    else if (path === "/notifications") html = await notifications(path);
+    else if (path === "/support") html = await support(path);
+    else if (path === "/profile") html = profile(path);
+    else if (path === "/admin/products") html = await adminProducts(path);
+    else if (path === "/admin/customers") html = await customers(path);
+    else if (path === "/terms" || path === "/privacy")
+      html = legal(path === "/privacy");
+    else
+      html = `<div class="wrap section">${empty("الصفحة غير موجودة", "تحقق من الرابط أو عد إلى الصفحة الرئيسية.", link("/", "العودة للرئيسية"))}</div>`;
+    if (seq !== state.sequence) return;
+    main.innerHTML = html;
+    document.title = `${main.querySelector("h1")?.textContent || "خدمات رقمية لمشروعك"} | انطلاقة`;
+    window.scrollTo({ top: 0, behavior: "instant" });
+    main.focus({ preventScroll: true });
+  } catch (e) {
+    if (seq === state.sequence)
+      main.innerHTML = `<div class="wrap section">${empty("تعذر فتح الصفحة", E(e.message), `<button class="btn" data-action="retry">حاول مجددًا</button> ${link("/", "الرئيسية", "secondary")}`)}</div>`;
+  }
+}
+document.addEventListener("submit", async (event) => {
+  const form = event.target.closest("form[data-form]");
+  if (!form) return;
+  event.preventDefault();
+  const button = form.querySelector("button[type=submit]");
+  const old = button.textContent;
+  button.disabled = true;
+  button.textContent = "جارٍ الحفظ…";
+  const error = form.querySelector(".error");
+  if (error) error.textContent = "";
+  const b = formData(form),
+    kind = form.dataset.form,
+    oid = form.dataset.id;
+  try {
+    if (kind === "register" || kind === "login") {
+      const result = await api("/api/auth/" + kind, {
+        method: "POST",
+        body: { ...b, acceptTerms: !!b.acceptTerms },
+      });
+      state.user = result.user;
+      state.csrf = result.csrf;
+      let next = form.dataset.next || "/dashboard";
+      if (!next.startsWith("/") || next.startsWith("//")) next = "/dashboard";
+      if (next === "/dashboard" && state.user.role === "admin") next = "/admin";
+      go(next);
+      notify(
+        kind === "register"
+          ? "تم إنشاء حسابك. أهلًا بك في انطلاقة."
+          : "تم تسجيل الدخول.",
+      );
+    } else if (kind === "start") {
+      const o = await api("/api/orders", {
+        method: "POST",
+        body: { ...b, type: "service" },
+      });
+      go("/order/" + o.id);
+      notify("تم إرسال طلبك وحفظه في حسابك.");
+    } else if (kind === "checkout") {
+      const o = await api("/api/orders", {
+        method: "POST",
+        body: { type: "product", productId: oid, acceptTerms: !!b.acceptTerms },
+      });
+      go("/order/" + o.id);
+      notify("تم إنشاء طلب الشراء.");
+    } else if (
+      kind === "message" ||
+      kind === "accept" ||
+      kind === "quote" ||
+      kind === "status" ||
+      kind === "confirm-payment" ||
+      kind === "revoke-payment"
+    ) {
+      const action = kind === "message" ? "messages" : kind;
+      const payload =
+        kind === "accept"
+          ? { accept: !!b.accept, contractId: form.dataset.contract }
+          : kind === "quote"
+            ? { ...b, amount: Math.round(Number(b.amount) * 100) }
+            : b;
+      await api(`/api/orders/${oid}/${action}`, {
+        method: "POST",
+        body: payload,
+      });
+      await render();
+      notify("تم حفظ التحديث.");
+    } else if (kind === "order-file" || kind === "product-file") {
+      const file = form.querySelector("input[type=file]").files[0];
+      if (!file) throw Error("اختر ملفًا أولًا.");
+      if (file.size > 10 * 1024 * 1024) throw Error("الحد الأقصى 10 ميجابايت.");
+      if (!["application/pdf", "image/jpeg", "image/png"].includes(file.type))
+        throw Error("اختر PDF أو PNG أو JPEG.");
+      await api(
+        kind === "order-file"
+          ? `/api/orders/${oid}/files`
+          : `/api/admin/products/${oid}/file`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": file.type,
+            "X-File-Name": encodeURIComponent(file.name),
+          },
+          body: file,
+        },
+      );
+      await render();
+      notify("تم رفع الملف.");
+    } else if (kind === "product" || kind === "product-edit") {
+      await api(
+        "/api/admin/products" + (kind === "product-edit" ? "/" + oid : ""),
+        {
+          method: "POST",
+          body: { ...b, amount: Math.round(Number(b.amount) * 100) },
+        },
+      );
+      await render();
+      notify(
+        kind === "product"
+          ? "حُفظت المسودة. ارفع ملف المنتج ثم انشره."
+          : "تم تحديث المنتج.",
+      );
+    } else if (kind === "ticket" || kind === "ticket-reply") {
+      await api("/api/tickets" + (kind === "ticket-reply" ? "/" + oid : ""), {
+        method: "POST",
+        body: b,
+      });
+      await render();
+      notify("تم حفظ رسالتك.");
+    } else if (kind === "password") {
+      const result = await api("/api/auth/password", {
+        method: "POST",
+        body: b,
+      });
+      state.csrf = result.csrf;
+      state.user = result.user;
+      form.reset();
+      notify("تم تغيير كلمة المرور وإنهاء الجلسات الأخرى.");
+    } else if (kind === "otp-send") {
+      const result = await api("/api/auth/otp/send", {
+        method: "POST",
+        body: b,
+      });
+      state.loginChallenge = result.challengeId;
+      await render();
+      notify(result.message);
+    } else if (kind === "otp-check") {
+      const result = await api("/api/auth/otp/check", {
+        method: "POST",
+        body: { code: b.code, challengeId: state.loginChallenge },
+      });
+      state.user = result.user;
+      state.csrf = result.csrf;
+      state.loginChallenge = null;
+      let next = form.dataset.next || "/dashboard";
+      if (!next.startsWith("/") || next.startsWith("//")) next = "/dashboard";
+      if (next === "/dashboard" && state.user.role === "admin") next = "/admin";
+      go(next);
+      notify("تم تسجيل الدخول.");
+    } else if (kind === "phone-send") {
+      const result = await api("/api/auth/phone/send", {
+        method: "POST",
+        body: b,
+      });
+      state.challenge = result.challengeId;
+      await render();
+      notify("أُرسل رمز التحقق إلى جوالك.");
+    } else if (kind === "phone-check") {
+      const result = await api("/api/auth/phone/check", {
+        method: "POST",
+        body: { code: b.code, challengeId: state.challenge },
+      });
+      state.user = result.user;
+      state.challenge = null;
+      await render();
+      notify("تم توثيق رقم الجوال.");
+    }
+  } catch (e) {
+    if (error) error.textContent = e.message;
+    else notify(e.message);
+    error?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  } finally {
+    button.disabled = false;
+    button.textContent = old;
+  }
+});
+document.addEventListener("click", async (event) => {
+  const el = event.target.closest("[data-action]");
+  if (!el) return;
+  const action = el.dataset.action;
+  try {
+    if (action === "skip") {
+      event.preventDefault();
+      main.focus();
+    } else if (action === "menu") {
+      const open = $("#main-nav").classList.toggle("open");
+      el.setAttribute("aria-expanded", String(open));
+    } else if (action === "logout") {
+      await api("/api/auth/logout", { method: "POST", body: {} });
+      state.user = null;
+      state.csrf = "";
+      go("/");
+      await render();
+      notify("تم تسجيل الخروج.");
+    } else if (action === "retry") await render();
+    else if (action === "print") window.print();
+    else if (action === "publish-product") {
+      el.disabled = true;
+      await api("/api/admin/products/" + el.dataset.id, {
+        method: "POST",
+        body: { published: el.dataset.published === "true" },
+      });
+      await render();
+      notify("تم تحديث ظهور المنتج.");
+    }
+  } catch (e) {
+    el.disabled = false;
+    notify(e.message);
+  }
+});
+document.addEventListener("input", (event) => {
+  if (event.target.dataset.filter === "orders") {
+    const q = event.target.value.trim().toLowerCase();
+    document
+      .querySelectorAll("#orders-list tbody tr")
+      .forEach(
+        (row) => (row.hidden = !row.textContent.toLowerCase().includes(q)),
+      );
+  }
+});
+window.addEventListener("hashchange", render);
+try {
+  [state.config, { user: state.user, csrf: state.csrf }] = await Promise.all([
+    api("/api/config"),
+    api("/api/session"),
+  ]);
+  await render();
+} catch (e) {
+  main.innerHTML = `<div class="wrap section"><div class="error">${E(e.message)} أعد تحميل الصفحة للمحاولة.</div></div>`;
+}

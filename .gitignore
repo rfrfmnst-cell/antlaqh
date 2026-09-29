@@ -21,3 +21,14 @@ rad.json
 *.flf
 #Test results file
 TestResults.xml
+# Antlaqh runtime files
+node_modules/
+data/
+.env
+.env.*
+!.env.example
+*.sqlite*
+*.log
+uploads/
+coverage/
+.DS_Store
