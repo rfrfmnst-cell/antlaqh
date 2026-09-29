@@ -3,6 +3,9 @@ import { existsSync, readFileSync } from "node:fs";
 for (const file of [
   "server.js",
   "lib/store.js",
+  "lib/catalog.js",
+  "lib/assistant.js",
+  "public/assistant.js",
   "lib/security.js",
   "public/app.js",
 ]) {
@@ -14,10 +17,17 @@ for (const file of [
 for (const file of [
   "public/index.html",
   "public/style.css",
+  "public/brand.css",
+  "public/assistant.css",
+  "public/assets/brand-logo-transparent.png",
   "public/assets/brand-original.jpeg",
   ".env.example",
 ])
   if (!existsSync(file)) throw Error(`Missing ${file}`);
+const { services } = await import("../lib/catalog.js");
+for (const service of services)
+  if (!existsSync("public/assets/catalog-" + service.id + ".webp"))
+    throw Error("Missing artwork: " + service.id);
 const html = readFileSync("public/index.html", "utf8");
 if (!html.includes('dir="rtl"')) throw Error("RTL document is required");
 console.log("Build verified. Deploy source; start with npm start.");

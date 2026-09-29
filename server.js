@@ -1,4 +1,6 @@
 import http from "node:http";
+import { services, coverKeys } from "./lib/catalog.js";
+import { createAssistant } from "./lib/assistant.js";
 import { isIP } from "node:net";
 import { readFile, writeFile, mkdir, unlink, stat } from "node:fs/promises";
 import { resolve, join, extname, sep } from "node:path";
@@ -57,43 +59,25 @@ if (
 await mkdir(join(dataDir, "files"), { recursive: true });
 const db = await createStore({ driver, dir: dataDir });
 const now = () => new Date().toISOString();
-const services = [
-  {
-    id: "website",
-    title: "المواقع والمنصات",
-    category: "تطوير",
-    description: "موقع يعكس هويتك ويمنح عملاءك تجربة واضحة وسهلة.",
-    icon: "globe",
-  },
-  {
-    id: "store",
-    title: "المتاجر الإلكترونية",
-    category: "تجارة",
-    description: "رحلة شراء مترابطة، من عرض المنتجات إلى إدارة الطلبات.",
-    icon: "bag",
-  },
-  {
-    id: "apps",
-    title: "التطبيقات والأنظمة",
-    category: "تطوير",
-    description: "حلول برمجية تناسب طريقة عملك ومتطلبات مشروعك.",
-    icon: "code",
-  },
-  {
-    id: "marketing",
-    title: "التسويق الرقمي",
-    category: "نمو",
-    description: "خطة تسويقية تنطلق من أهدافك وتصل إلى جمهورك.",
-    icon: "chart",
-  },
-  {
-    id: "content",
-    title: "المحتوى والإنتاج",
-    category: "محتوى",
-    description: "محتوى مرئي ومكتوب يعبّر عن مشروعك بوضوح.",
-    icon: "spark",
-  },
-];
+const assistant = createAssistant({
+  getCatalog: async () => ({
+    services,
+    products: (await db.list("product"))
+      .filter((p) => p.published && p.file)
+      .slice(0, 30)
+      .map((p) => ({
+        title: p.title,
+        category: p.category,
+        description: p.description.slice(0, 500),
+        priceSAR: p.amount / 100,
+      })),
+  }),
+});
+function validCover(value) {
+  if (!coverKeys.includes(value))
+    throw fail(400, "اختر صورة من مكتبة الخدمات.");
+  return value;
+}
 const smsReady = !!(
   process.env.TWILIO_ACCOUNT_SID &&
   process.env.TWILIO_AUTH_TOKEN &&
@@ -305,6 +289,7 @@ async function api(req, res, url) {
   }
   const auth = await session(req);
   const publicWrite = [
+    "/api/assistant",
     "/api/auth/register",
     "/api/auth/login",
     "/api/auth/otp/send",
@@ -316,16 +301,23 @@ async function api(req, res, url) {
       throw fail(403, "انتهت صلاحية الصفحة. أعد تحميلها ثم حاول.");
   }
   if (method === "GET" && path === "/api/health")
-    return json(res, 200, { status: "ok", version: "4.0.0" });
+    return json(res, 200, { status: "ok", version: "5.0.0" });
   if (method === "GET" && path === "/api/config")
     return json(res, 200, {
       services,
       smsReady,
+      assistantReady: assistant.ready,
       businessEmail: process.env.BUSINESS_EMAIL || "",
       businessPhone: process.env.BUSINESS_PHONE || "",
       payments: "manual",
       environment: production ? "production" : "development",
     });
+  if (method === "POST" && path === "/api/assistant") {
+    rate(`assistant:${ip}`, 8, 5 * 60 * 1000);
+    rate(`assistant-day:${ip}`, 40, 24 * 60 * 60 * 1000);
+    const b = await jsonBody(req);
+    return json(res, 200, await assistant.reply(b?.messages));
+  }
   if (method === "GET" && path === "/api/session")
     return json(
       res,
@@ -795,6 +787,7 @@ async function api(req, res, url) {
         description: text(b.description, 10, 5000),
         category: text(b.category, 2, 60),
         amount: amount(b.amount),
+        cover: b.cover === undefined ? "website" : validCover(b.cover),
         published: false,
         createdAt: now(),
         file: null,
@@ -828,6 +821,7 @@ async function api(req, res, url) {
           p.description = text(b.description, 10, 5000);
         if (b.amount !== undefined) p.amount = amount(b.amount);
         if (b.category !== undefined) p.category = text(b.category, 2, 60);
+        if (b.cover !== undefined) p.cover = validCover(b.cover);
         if (typeof b.published === "boolean") p.published = b.published;
         return p;
       });
@@ -904,6 +898,7 @@ const types = {
   ".jpeg": "image/jpeg",
   ".jpg": "image/jpeg",
   ".png": "image/png",
+  ".webp": "image/webp",
   ".svg": "image/svg+xml",
   ".ico": "image/x-icon",
   ".webmanifest": "application/manifest+json",

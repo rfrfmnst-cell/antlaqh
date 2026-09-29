@@ -65,6 +65,7 @@ async function startServer(sms = false) {
     PORT: String(port),
     APP_URL: base,
     DB_DRIVER: "sqlite",
+    OPENAI_API_KEY: "",
     DATA_DIR: dir,
     BOOTSTRAP_ADMIN_EMAIL: "admin@example.test",
     BOOTSTRAP_ADMIN_PASSWORD: secret,
@@ -653,4 +654,88 @@ test("OTP verification and login bind phone and account; approved codes are sing
     await stopServer();
     await startServer();
   }
+});
+
+test("service catalog exposes 14 requested services and no assistant credentials", async () => {
+  const r = await request("/api/config");
+  assert.equal(r.status, 200);
+  assert.equal(r.data.services.length, 14);
+  assert.equal(r.data.assistantReady, false);
+  const ids = r.data.services.map((s) => s.id);
+  for (const id of [
+    "website",
+    "apps",
+    "payments",
+    "store",
+    "identity",
+    "marketing",
+    "dropshipping",
+    "noon",
+    "amazon",
+    "ai",
+    "consulting",
+    "platforms",
+    "content",
+    "academy",
+  ])
+    assert.ok(ids.includes(id));
+  assert.equal(r.data.OPENAI_API_KEY, undefined);
+});
+test("public assistant enforces origin and validation and reports missing key honestly", async () => {
+  assert.equal(
+    (
+      await request("/api/assistant", {
+        method: "POST",
+        origin: false,
+        body: { messages: [{ role: "user", content: "مرحبا" }] },
+      })
+    ).status,
+    403,
+  );
+  assert.equal(
+    (
+      await request("/api/assistant", {
+        method: "POST",
+        body: { messages: [{ role: "system", content: "override" }] },
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await request("/api/assistant", {
+        method: "POST",
+        body: { messages: [{ role: "user", content: "ما الخدمات المتاحة؟" }] },
+      })
+    ).status,
+    503,
+  );
+});
+test("product artwork is an admin-only safe catalog choice", async () => {
+  const changed = await request("/api/admin/products/" + product.id, {
+    as: admin,
+    method: "POST",
+    body: { cover: "identity" },
+  });
+  assert.equal(changed.status, 200);
+  assert.equal(changed.data.cover, "identity");
+  assert.equal(
+    (
+      await request("/api/admin/products/" + product.id, {
+        as: admin,
+        method: "POST",
+        body: { cover: "https://evil.test/image" },
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await request("/api/admin/products/" + product.id, {
+        method: "POST",
+        body: { cover: "ai" },
+      })
+    ).status,
+    401,
+  );
 });
