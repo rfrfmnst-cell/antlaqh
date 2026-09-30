@@ -147,3 +147,10 @@ test("assistant times out a stalled provider", async () => {
     clearTimeout(keepAlive);
   }
 });
+
+test("provider diagnostics distinguish quota, authentication and model errors without exposing raw details", async () => {
+  for (const [status, code, expected] of [[429,"insufficient_quota","AI_QUOTA"],[401,"invalid_api_key","AI_AUTH"],[404,"model_not_found","AI_MODEL"],[403,"forbidden","AI_ACCESS"],[429,"rate_limit_exceeded","AI_RATE"]]) {
+    const app=createAssistant({apiKey:"private-test-key",getCatalog:async()=>({services}),fetchImpl:async()=>new Response(JSON.stringify({error:{code,message:"private-test-key and private account data"}}),{status})});
+    await assert.rejects(app.reply(messages),e=>e.status===502 && e.message.includes(expected) && !e.message.includes("private-test-key") && !e.message.includes("private account"));
+  }
+});
