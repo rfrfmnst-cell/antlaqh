@@ -18,6 +18,7 @@ let ready = false,
   history = [],
   failedMessages = null,
   controller = null,
+  availabilityController = null,
   previousFocus = null;
 
 function appendMessage(role, content) {
@@ -38,24 +39,48 @@ function updateControls() {
   host
     .querySelectorAll("[data-ai-prompt]")
     .forEach((b) => (b.disabled = !ready || busy));
-  retry.disabled = busy;
+  retry.disabled = !ready || busy;
   send.classList.toggle("ai-loading", busy);
   dialog.setAttribute("aria-busy", String(busy));
 }
 async function checkAvailability() {
+  availabilityController?.abort();
+  const currentController = new AbortController();
+  availabilityController = currentController;
+  const timer = setTimeout(() => currentController.abort(), 8000);
+  ready = false;
+  status.textContent = "جارٍ التحقق من توفر المساعد…";
+  updateControls();
   try {
-    const response = await fetch("/api/config", { credentials: "same-origin" });
+    const response = await fetch("/api/config", {
+      credentials: "same-origin",
+      cache: "no-store",
+      signal: currentController.signal,
+    });
     if (!response.ok) throw Error();
-    ready = (await response.json()).assistantReady === true;
+    const config = await response.json();
+    if (availabilityController !== currentController) return;
+    ready = config.assistantReady === true;
     status.textContent = ready
       ? "مساعد ذكي لاكتشاف الخدمات وتوضيح الخطوة التالية"
       : "الردود الذكية غير مفعّلة حاليًا. تصفّح خدماتنا أو تواصل مع الفريق.";
   } catch {
+    if (availabilityController !== currentController) return;
     ready = false;
     status.textContent = "تعذر الاتصال. يمكنك التواصل مع فريق إنطلاقة.";
+  } finally {
+    clearTimeout(timer);
+    if (availabilityController === currentController) {
+      availabilityController = null;
+      status.classList.toggle("ai-available", ready);
+      updateControls();
+    }
   }
-  status.classList.toggle("ai-available", ready);
-  updateControls();
+}
+function showError(message, canRetry = false) {
+  errorBox.querySelector("span").textContent = message;
+  errorBox.hidden = false;
+  retry.hidden = !canRetry;
 }
 function close() {
   dialog.close();
@@ -74,6 +99,7 @@ async function request(messages) {
   busy = true;
   failedMessages = null;
   errorBox.hidden = true;
+  retry.hidden = true;
   updateControls();
   const progress = document.createElement("div");
   progress.className = "ai-thinking";
@@ -91,9 +117,22 @@ async function request(messages) {
       body: JSON.stringify({ messages }),
       signal: currentController.signal,
     });
-    const result = await response.json();
-    if (!response.ok) throw Error(result.error || "تعذر الحصول على الرد.");
-    if (typeof result.reply !== "string" || !result.reply.trim())
+    let result;
+    try {
+      result = await response.json();
+    } catch {
+      throw Error("تعذر الحصول على الرد. حاول مجددًا أو تواصل مع الفريق.");
+    }
+    if (controller !== currentController) return;
+    if (!response.ok) {
+      if (response.status === 503) {
+        ready = false;
+        status.textContent = "الردود الذكية غير مفعّلة حاليًا. تصفّح خدماتنا أو تواصل مع الفريق.";
+        status.classList.remove("ai-available");
+      }
+      throw Error(typeof result?.error === "string" ? result.error : "تعذر الحصول على الرد.");
+    }
+    if (typeof result?.reply !== "string" || !result.reply.trim())
       throw Error("لم يصل رد مكتمل. أعد المحاولة.");
     if (controller !== currentController) return;
     appendMessage("assistant", result.reply);
@@ -104,12 +143,14 @@ async function request(messages) {
   } catch (error) {
     if (controller !== currentController) return;
     failedMessages = messages;
-    errorBox.querySelector("span").textContent =
+    showError(
       error.name === "AbortError"
         ? "استغرق الرد وقتًا أطول من المتوقع. حاول مجددًا."
-        : error.message;
-    errorBox.hidden = false;
-    retry.hidden = false;
+        : error instanceof TypeError
+          ? "تعذر الاتصال. حاول مجددًا أو تواصل مع الفريق."
+          : error.message,
+      ready,
+    );
   } finally {
     clearTimeout(timer);
     progress.remove();
@@ -126,6 +167,10 @@ host.querySelector(".ai-form").addEventListener("submit", (event) => {
   event.stopPropagation();
   const message = input.value.trim();
   if (!ready || busy || !message) return;
+  if (message.length > 3000) {
+    showError("اختصر رسالتك إلى 3000 حرف قبل إرسالها.");
+    return;
+  }
   let recent = history.slice(-10);
   while (
     recent.length &&
@@ -147,7 +192,11 @@ document.addEventListener("click", (event) => {
   if (trigger) {
     event.preventDefault();
     const draft = trigger.hasAttribute("data-assistant-draft") ? document.getElementById("home-ai-draft")?.value || "" : trigger.dataset.assistantPrompt || "";
-    open().then(() => { if (draft) input.value = draft.slice(0, 3000); if (ready) input.focus(); });
+    open().then(() => {
+      if (!dialog.open || busy) return;
+      if (draft) input.value = draft.slice(0, 3000);
+      if (ready) input.focus();
+    });
   }
 });
 launcher.addEventListener("click", open);
@@ -179,7 +228,7 @@ host
   .querySelectorAll("[data-ai-link]")
   .forEach((link) => link.addEventListener("click", close));
 retry.addEventListener("click", () => {
-  if (failedMessages && !busy) request(failedMessages);
+  if (failedMessages && ready && !busy) request(failedMessages);
 });
 host.querySelector(".ai-clear").addEventListener("click", () => {
   const pending = controller;

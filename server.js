@@ -279,18 +279,31 @@ if (process.env.BOOTSTRAP_ADMIN_EMAIL && process.env.BOOTSTRAP_ADMIN_PASSWORD) {
     );
 }
 
-async function claimLoginPhone(number, userId) {
+function isDuplicate(error) {
+  return error.code === "ER_DUP_ENTRY" || String(error.message).includes("UNIQUE constraint");
+}
+function currentAccount(u, auth) {
+  if (u.disabled || u.password !== auth.u.password ||
+      (u.passwordVersion || 0) !== (auth.u.passwordVersion || 0))
+    throw fail(409, "تغيّرت بيانات الحساب. أعد تسجيل الدخول ثم حاول مجددًا.");
+}
+async function phoneClaim(number, userId) {
   const key = digest(number);
   const verified = await db.get("verifiedPhone", key);
   if (verified && verified.userId !== userId) throw fail(409, "رقم الجوال مرتبط بحساب آخر.");
   const existing = await db.get("loginPhone", key);
   if (existing) {
     if (existing.userId !== userId) throw fail(409, "رقم الجوال مرتبط بحساب آخر.");
-    return false;
+    return null;
   }
-  try { await db.insert("loginPhone", { id: key, userId }, userId); }
+  return { kind: "loginPhone", item: { id: key, userId }, owner: userId };
+}
+async function claimLoginPhone(number, userId) {
+  const claim = await phoneClaim(number, userId);
+  if (!claim) return false;
+  try { await db.insert(claim.kind, claim.item, claim.owner); }
   catch (error) {
-    if (error.code === "ER_DUP_ENTRY" || String(error.message).includes("UNIQUE constraint")) throw fail(409, "رقم الجوال مرتبط بحساب آخر.");
+    if (isDuplicate(error)) throw fail(409, "رقم الجوال مرتبط بحساب آخر.");
     throw error;
   }
   return true;
@@ -360,6 +373,10 @@ async function api(req, res, url) {
     const b = await jsonBody(req);
     const mail = email(b.email),
       uid = digest(mail);
+    if (b.acceptTerms !== true)
+      throw fail(400, "يلزم الاطلاع على الشروط والخصوصية والموافقة عليهما.");
+    if (await db.get("user", uid))
+      throw fail(409, "هذا البريد مسجّل بالفعل. استخدم تسجيل الدخول.");
     const u = {
       id: uid,
       name: text(b.name, 2, 100),
@@ -369,23 +386,19 @@ async function api(req, res, url) {
       phoneVerified: false,
       createdAt: now(),
     };
-    if (b.acceptTerms !== true)
-      throw fail(400, "يلزم الاطلاع على الشروط والخصوصية والموافقة عليهما.");
     u.termsAcceptedAt = now();
-    let phoneClaim;
+    let claim;
     if (b.phone) {
       u.loginPhone = normalizePhone(b.phone);
-      phoneClaim = await claimLoginPhone(u.loginPhone, uid);
+      claim = await phoneClaim(u.loginPhone, uid);
     }
     try {
-      await db.insert("user", u, uid);
+      await db.insertMany([{ kind: "user", item: u, owner: uid }, ...(claim ? [claim] : [])]);
     } catch (e) {
-      if (phoneClaim) await db.remove("loginPhone", digest(u.loginPhone));
-      if (
-        e.code === "ER_DUP_ENTRY" ||
-        String(e.message).includes("UNIQUE constraint")
-      )
-        throw fail(409, "هذا البريد مسجّل بالفعل. استخدم تسجيل الدخول.");
+      if (isDuplicate(e))
+        throw fail(409, (await db.get("user", uid))
+          ? "هذا البريد مسجّل بالفعل. استخدم تسجيل الدخول."
+          : "رقم الجوال مرتبط بحساب آخر.");
       throw e;
     }
     return json(res, 201, await login(res, u));
@@ -424,13 +437,14 @@ async function api(req, res, url) {
     const number = normalizePhone(b.phone);
     // A login identifier is immutable here; changing it requires verified support.
     if (auth.u.loginPhone && auth.u.loginPhone !== number) throw fail(409, "رقم الدخول مرتبط بالفعل. تواصل مع الدعم لتغييره.");
-    const claimed = await claimLoginPhone(number, auth.u.id);
+    const claim = await phoneClaim(number, auth.u.id);
     let updated;
     try { updated = await db.update("user", auth.u.id, u => {
+      currentAccount(u, auth);
       if (u.loginPhone && u.loginPhone !== number) throw fail(409, "رقم الدخول مرتبط بالفعل.");
       u.loginPhone = number; u.passwordVersion = (u.passwordVersion || 0) + 1; return u;
-    }); }
-    catch (error) { if (claimed) await db.remove("loginPhone", digest(number)); throw error; }
+    }, claim ? [claim] : []); }
+    catch (error) { if (isDuplicate(error)) throw fail(409, "رقم الجوال مرتبط بحساب آخر."); throw error; }
     return json(res, 200, await login(res, updated));
   }
   if (method === "POST" && path === "/api/auth/password") {
@@ -444,6 +458,7 @@ async function api(req, res, url) {
       throw fail(400, "كلمة المرور الحالية غير صحيحة.");
     const hash = await hashPassword(password(b.password));
     const updated = await db.update("user", auth.u.id, (u) => {
+      currentAccount(u, auth);
       u.password = hash;
       u.passwordVersion = (u.passwordVersion || 0) + 1;
       return u;
@@ -487,7 +502,7 @@ async function api(req, res, url) {
     if (!c || c.used || c.expires < Date.now() || c.attempts >= 5)
       throw fail(400, "الرمز غير صالح أو منتهي. اطلب رمزًا جديدًا.");
     await db.update("otpLogin", cid, (x) => {
-      if (x.used || x.attempts >= 5) throw fail(400, "الرمز غير صالح.");
+      if (x.used || x.expires < Date.now() || x.attempts >= 5) throw fail(400, "الرمز غير صالح.");
       x.attempts++;
       return x;
     });
@@ -500,7 +515,7 @@ async function api(req, res, url) {
     if (!u || u.disabled || !u.phoneVerified || u.phone !== c.phone)
       throw fail(400, "الرمز غير صالح.");
     await db.update("otpLogin", cid, (x) => {
-      if (x.used) throw fail(400, "تم استخدام الرمز.");
+      if (x.used || x.expires < Date.now()) throw fail(400, "الرمز غير صالح أو منتهي.");
       x.used = true;
       return x;
     });
@@ -529,10 +544,11 @@ async function api(req, res, url) {
     const b = await jsonBody(req),
       cid = text(b.challengeId, 36, 36);
     const c = owned(await db.get("phone", cid), auth);
+    if (c.owner !== auth.u.id) throw fail(404, "لم يتم العثور على السجل.");
     if (c.used || c.expires < Date.now() || c.attempts >= 5)
       throw fail(400, "انتهى الرمز. اطلب رمزًا جديدًا.");
     await db.update("phone", cid, (x) => {
-      if (x.used || x.attempts >= 5) throw fail(400, "اطلب رمزًا جديدًا.");
+      if (x.used || x.expires < Date.now() || x.attempts >= 5) throw fail(400, "اطلب رمزًا جديدًا.");
       x.attempts++;
       return x;
     });
@@ -542,7 +558,7 @@ async function api(req, res, url) {
     });
     if (result.status !== "approved") throw fail(400, "رمز التحقق غير صحيح.");
     await db.update("phone", cid, (x) => {
-      if (x.used) throw fail(400, "تم استخدام الرمز.");
+      if (x.used || x.expires < Date.now()) throw fail(400, "الرمز غير صالح أو منتهي.");
       x.used = true;
       return x;
     });
