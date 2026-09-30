@@ -412,7 +412,7 @@ function contractCard(q, o, history = false) {
 }
 function paymentCard(o) {
   if (!o.amount) return "";
-  return `<section class="panel"><h2>ملخص الدفع</h2><p class="amount-large">${money(o.amount)}</p>${o.payment?.confirmed && !o.payment.revoked ? `<div class="notice">تم تأكيد استلام الدفع في ${date(o.payment.at)}.</div>${link("/invoice/" + o.id, "عرض إيصال الدفع", "secondary")}${o.type === "product" ? `<a class="btn spaced" href="/api/orders/${o.id}/download">${icon("download")} تنزيل المنتج</a>` : ""}` : o.status === "awaiting_payment" ? `<p class="small muted">نسّق تفاصيل الدفع مع الفريق داخل محادثة الطلب. يمكنك إرفاق إثبات التحويل للمراجعة.</p><div class="notice warning">رفع الإثبات لا يعني تأكيد الدفع؛ يظهر التأكيد بعد مراجعة الإدارة.</div>` : `<p class="small muted">${o.payment?.revoked ? "أُلغي استحقاق هذه الدفعة. راجع فريق الدعم." : "يأتي الدفع بعد اعتماد العرض والعقد."}</p>`}</section>`;
+  return `<section class="panel"><h2>ملخص الدفع</h2><p class="amount-large">${money(o.amount)}</p>${o.payment?.confirmed && !o.payment.revoked ? `<div class="notice">تم تأكيد استلام الدفع في ${date(o.payment.at)}.</div>${link("/invoice/" + o.id, "عرض إيصال الدفع", "secondary")}${o.type === "product" ? `<a class="btn spaced" href="/api/orders/${o.id}/download">${icon("download")} تنزيل المنتج</a>` : ""}` : o.status === "awaiting_payment" ? `<h3>تحويل بنكي — البنك الأهلي السعودي</h3><p class="small">حوّل المبلغ الموضح أعلاه، واذكر رقم الطلب في وصف التحويل.</p><div class="field"><label for="bank-iban">رقم الآيبان</label><input id="bank-iban" dir="ltr" readonly value="SA3610000044000001058010" aria-label="رقم الآيبان للبنك الأهلي السعودي"></div><p class="small muted">رقم الطلب: <strong dir="ltr">${E(o.number)}</strong></p>${o.files.filter(f => f.purpose === "payment_receipt").map(f => `<div class="file-row"><div><strong>إيصال تحويل مرفق</strong><small>${date(f.at)}</small></div><a class="btn secondary small" href="/api/orders/${o.id}/files/${f.id}">عرض الإيصال</a></div>`).join("")}${state.user.role !== "admin" ? `<form class="spaced" data-form="payment-receipt" data-id="${o.id}">${errors()}<div class="field"><label for="transfer-receipt">إرفاق إيصال التحويل</label><input id="transfer-receipt" name="file" type="file" accept=".pdf,.png,.jpg,.jpeg" required><p class="hint">PDF أو PNG أو JPEG، حتى 10 ميجابايت. الإيصال متاح لك وللإدارة فقط.</p></div><button class="btn" type="submit">إرسال الإيصال للمراجعة</button></form>` : ""}<div class="notice warning">رفع الإيصال لا يؤكد الدفع تلقائيًا؛ تؤكد الإدارة الدفع بعد التحقق من وصول التحويل.</div>` : `<p class="small muted">${o.payment?.revoked ? "أُلغي استحقاق هذه الدفعة. راجع فريق الدعم." : "يأتي الدفع بعد اعتماد العرض والعقد."}</p>`}</section>`;
 }
 function adminOrderControls(o) {
   if (state.user.role !== "admin") return "";
@@ -447,7 +447,7 @@ async function orderDetail(path, oid) {
               : ""
           }</section>`
         : ""
-    }${state.user.role === "admin" && o.type === "service" && (!o.payment?.confirmed || o.payment.revoked) && ["received", "reviewing", "quoted", "awaiting_payment"].includes(o.status) ? `<section class="panel"><h2>${q ? "إصدار عرض جديد" : "إعداد عرض السعر والعقد"}</h2><form data-form="quote" data-id="${o.id}">${errors()}${textarea("agreement", "الاتفاق ونطاق العمل", 'required minlength="10" maxlength="10000"')}${field("amount", "السعر النهائي (ر.س)", "number", 'required min="1" max="1000000" step="0.01"')}${field("deliveryDate", "تاريخ التسليم", "date", "required")}${textarea("terms", "شروط الاتفاق", 'required minlength="10" maxlength="10000"')}<div class="notice">اكتب المخرجات وحدود النطاق، التعديلات، الرسوم الخارجية، الضريبة إن وجبت، التسليم وحقوق الملفات، وآلية الإلغاء والدعم. السعر المدخل إجمالي نهائي للعميل. يحفظ كل إصدار مستقلًا ويتطلب موافقة جديدة.</div><button class="btn" type="submit">إرسال العرض للعميل</button></form></section>` : ""}<section class="panel"><h2>محادثة الطلب</h2>${o.messages.length ? o.messages.map((x) => `<div class="message ${x.role === "admin" ? "admin" : ""}"><div class="message-meta"><strong>${E(x.by)}${x.role === "admin" ? " · فريق انطلاقة" : ""}</strong><span>${time(x.at)}</span></div><p class="pre">${E(x.message)}</p></div>`).join("") : '<p class="muted small">أضف سؤالًا أو ملاحظة لفريق العمل.</p>'}<form data-form="message" data-id="${o.id}" class="spaced">${errors()}${textarea("message", "رسالتك", 'required maxlength="4000"')}<button class="btn" type="submit">إرسال الرسالة</button></form></section><section class="panel"><h2>المرفقات</h2>${o.files.map((f) => `<div class="file-row"><div class="file-info"><strong>${E(f.name)}</strong><small>${E(f.by)} · ${(f.size / 1024).toFixed(0)} KB</small></div><a class="btn secondary small" href="/api/orders/${o.id}/files/${f.id}">${icon("download")} تنزيل</a></div>`).join("") || '<p class="small muted">لا توجد مرفقات بعد.</p>'}<form class="spaced" data-form="order-file" data-id="${o.id}">${errors()}<div class="field"><label for="attachment">إضافة ملف أو إثبات دفع</label><input class="file-input" id="attachment" name="file" type="file" accept=".pdf,.png,.jpg,.jpeg" required><p class="hint">PDF أو PNG أو JPEG، حتى 10 ميجابايت. الملفات متاحة لك وللإدارة فقط.</p></div><button class="btn secondary" type="submit">رفع المرفق</button></form></section></div><aside>${paymentCard(o)}${adminOrderControls(o)}<section class="panel"><h2>سجل المشروع</h2><ul class="timeline">${[
+    }${state.user.role === "admin" && o.type === "service" && (!o.payment?.confirmed || o.payment.revoked) && ["received", "reviewing", "quoted", "awaiting_payment"].includes(o.status) ? `<section class="panel"><h2>${q ? "إصدار عرض جديد" : "إعداد عرض السعر والعقد"}</h2><form data-form="quote" data-id="${o.id}">${errors()}${textarea("agreement", "الاتفاق ونطاق العمل", 'required minlength="10" maxlength="10000"')}${field("amount", "السعر النهائي (ر.س)", "number", 'required min="1" max="1000000" step="0.01"')}${field("deliveryDate", "تاريخ التسليم", "date", "required")}${textarea("terms", "شروط الاتفاق", 'required minlength="10" maxlength="10000"')}<div class="notice">اكتب المخرجات وحدود النطاق، التعديلات، الرسوم الخارجية، الضريبة إن وجبت، التسليم وحقوق الملفات، وآلية الإلغاء والدعم. السعر المدخل إجمالي نهائي للعميل. يحفظ كل إصدار مستقلًا ويتطلب موافقة جديدة.</div><button class="btn" type="submit">إرسال العرض للعميل</button></form></section>` : ""}<section class="panel"><h2>محادثة الطلب</h2>${o.messages.length ? o.messages.map((x) => `<div class="message ${x.role === "admin" ? "admin" : ""}"><div class="message-meta"><strong>${E(x.by)}${x.role === "admin" ? " · فريق انطلاقة" : ""}</strong><span>${time(x.at)}</span></div><p class="pre">${E(x.message)}</p></div>`).join("") : '<p class="muted small">أضف سؤالًا أو ملاحظة لفريق العمل.</p>'}<form data-form="message" data-id="${o.id}" class="spaced">${errors()}${textarea("message", "رسالتك", 'required maxlength="4000"')}<button class="btn" type="submit">إرسال الرسالة</button></form></section><section class="panel"><h2>المرفقات</h2>${o.files.map((f) => `<div class="file-row"><div class="file-info"><strong>${f.purpose === "payment_receipt" ? "إيصال تحويل بنكي · " : ""}${E(f.name)}</strong><small>${E(f.by)} · ${(f.size / 1024).toFixed(0)} KB</small></div><a class="btn secondary small" href="/api/orders/${o.id}/files/${f.id}">${icon("download")} تنزيل</a></div>`).join("") || '<p class="small muted">لا توجد مرفقات بعد.</p>'}<form class="spaced" data-form="order-file" data-id="${o.id}">${errors()}<div class="field"><label for="attachment">إضافة ملف أو إثبات دفع</label><input class="file-input" id="attachment" name="file" type="file" accept=".pdf,.png,.jpg,.jpeg" required><p class="hint">PDF أو PNG أو JPEG، حتى 10 ميجابايت. الملفات متاحة لك وللإدارة فقط.</p></div><button class="btn secondary" type="submit">رفع المرفق</button></form></section></div><aside>${paymentCard(o)}${adminOrderControls(o)}<section class="panel"><h2>سجل المشروع</h2><ul class="timeline">${[
       ...o.events,
     ]
       .reverse()
@@ -467,7 +467,7 @@ async function checkout(pid) {
   const products = await api("/api/products"),
     p = products.find((p) => p.id === pid);
   if (!p) throw Error("المنتج غير متاح حاليًا.");
-  return `<div class="wrap"><div class="checkout">${pageHead("مراجعة طلب المنتج", "راجع تفاصيل المنتج قبل إنشاء الطلب.")}<section class="panel">${productImage(p, "checkout-cover")}<h2>${E(p.title)}</h2><p class="pre">${E(p.description)}</p><div class="invoice-total"><span>الإجمالي</span><span>${money(p.amount)}</span></div><form class="spaced" data-form="checkout" data-id="${p.id}">${errors()}<div class="notice">ينشئ هذا الزر طلب شراء فقط. تُنسَّق طريقة الدفع مع الفريق، ويُتاح التنزيل بعد تأكيد الاستلام.</div><label class="check"><input name="acceptTerms" type="checkbox" required><span>اطلعت على وصف المنتج والسعر و<a href="#/terms" target="_blank" rel="noopener">شروط الشراء</a> وأوافق عليها.</span></label><button class="btn" type="submit">إنشاء طلب الشراء</button></form></section></div></div>`;
+  return `<div class="wrap"><div class="checkout">${pageHead("مراجعة طلب المنتج", "راجع تفاصيل المنتج قبل إنشاء الطلب.")}<section class="panel">${productImage(p, "checkout-cover")}<h2>${E(p.title)}</h2><p class="pre">${E(p.description)}</p><div class="invoice-total"><span>الإجمالي</span><span>${money(p.amount)}</span></div><form class="spaced" data-form="checkout" data-id="${p.id}">${errors()}<div class="notice">ينشئ هذا الزر طلب شراء فقط. الدفع بتحويل بنكي للبنك الأهلي السعودي مع إرفاق الإيصال داخل الطلب. يُتاح التنزيل بعد تأكيد الإدارة استلام المبلغ.</div><label class="check"><input name="acceptTerms" type="checkbox" required><span>اطلعت على وصف المنتج والسعر و<a href="#/terms" target="_blank" rel="noopener">شروط الشراء</a> وأوافق عليها.</span></label><button class="btn" type="submit">إنشاء طلب الشراء</button></form></section></div></div>`;
 }
 async function contracts(path) {
   const orders = (await api("/api/orders")).filter((o) => o.contracts.length);
@@ -725,14 +725,14 @@ document.addEventListener("submit", async (event) => {
       });
       await render();
       notify("تم حفظ التحديث.");
-    } else if (kind === "order-file" || kind === "product-file") {
+    } else if (kind === "order-file" || kind === "payment-receipt" || kind === "product-file") {
       const file = form.querySelector("input[type=file]").files[0];
       if (!file) throw Error("اختر ملفًا أولًا.");
       if (file.size > 10 * 1024 * 1024) throw Error("الحد الأقصى 10 ميجابايت.");
       if (!["application/pdf", "image/jpeg", "image/png"].includes(file.type))
         throw Error("اختر PDF أو PNG أو JPEG.");
       await api(
-        kind === "order-file"
+        kind !== "product-file"
           ? `/api/orders/${oid}/files`
           : `/api/admin/products/${oid}/file`,
         {
@@ -740,12 +740,13 @@ document.addEventListener("submit", async (event) => {
           headers: {
             "Content-Type": file.type,
             "X-File-Name": encodeURIComponent(file.name),
+            ...(kind === "payment-receipt" ? {"X-File-Purpose": "payment_receipt"} : {}),
           },
           body: file,
         },
       );
       await render();
-      notify("تم رفع الملف.");
+      notify(kind === "payment-receipt" ? "تم إرسال إيصال التحويل للمراجعة." : "تم رفع الملف.");
     } else if (kind === "product" || kind === "product-edit") {
       await api(
         "/api/admin/products" + (kind === "product-edit" ? "/" + oid : ""),

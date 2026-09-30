@@ -339,7 +339,8 @@ async function api(req, res, url) {
       assistantReady: assistant.ready,
       businessEmail: process.env.BUSINESS_EMAIL || "antlaqh2030@gmail.com",
       businessPhone: process.env.BUSINESS_PHONE || "+966553575760",
-      payments: "manual",
+      payments: "bank_transfer",
+      bankTransfer: { bank: "البنك الأهلي السعودي", iban: "SA3610000044000001058010", currency: "SAR" },
       environment: production ? "production" : "development",
     });
   if (method === "POST" && path === "/api/assistant") {
@@ -666,15 +667,21 @@ async function api(req, res, url) {
     if (method === "POST" && action === "files") {
       if (o.files.length >= 20)
         throw fail(400, "الحد الأقصى 20 مرفقًا لكل طلب.");
+      const receipt = req.headers["x-file-purpose"] === "payment_receipt";
+      if (receipt && o.status !== "awaiting_payment")
+        throw fail(409, "يرفع إيصال التحويل بعد اعتماد العرض وقبل تأكيد الدفع.");
       const f = await saveFile(req);
+      if (receipt) { f.purpose = "payment_receipt"; f.amount = o.amount; f.contractId = o.currentContract || null; }
       f.by = auth.u.name;
       f.role = auth.u.role;
       try {
         const result = await db.update("order", oid, (x) => {
           if (x.files.length >= 20)
             throw fail(400, "وصلت إلى الحد الأقصى للمرفقات.");
+          if (receipt && (x.status !== "awaiting_payment" || x.amount !== f.amount || (x.currentContract || null) !== f.contractId))
+            throw fail(409, "تغيّر العرض أو حالة الدفع؛ حدّث الصفحة قبل رفع الإيصال.");
           x.files.push(f);
-          event(x, "تم إرفاق ملف", auth.u);
+          event(x, receipt ? "تم إرفاق إيصال تحويل بنكي للمراجعة" : "تم إرفاق ملف", auth.u);
           return x;
         });
         return json(res, 201, result);

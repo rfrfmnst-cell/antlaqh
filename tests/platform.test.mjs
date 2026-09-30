@@ -779,3 +779,32 @@ test("cancelled orders and past delivery dates cannot produce contracts", async(
   assert.equal((await request(`/api/orders/${order.data.id}/status`,{as:admin,method:"POST",body:{status:"cancelled"}})).status,200);
   assert.equal((await request(`/api/orders/${order.data.id}/quote`,{as:admin,method:"POST",body:quote})).status,409);
 });
+
+test("bank receipts stay private and never confirm payment automatically", async () => {
+  const config = (await request("/api/config")).data;
+  assert.equal(config.payments, "bank_transfer");
+  assert.equal(config.bankTransfer.iban, "SA3610000044000001058010");
+  const login = await request("/api/auth/login", {method:"POST", body:{email:"legacy-phone@example.test",password:secret}});
+  const customer = {...login.data,cookie:login.headers.get("set-cookie").split(";")[0]};
+  let r = await request("/api/orders", {as:customer,method:"POST",body:{type:"service",service:"website",title:"اختبار إيصال تحويل",description:"اختبار رفع إيصال التحويل ومراجعة الإدارة فقط."}});
+  const oid = r.data.id;
+  const upload = as => request(`/api/orders/${oid}/files`, {as,method:"POST",body:pdf,headers:{"Content-Type":"application/pdf","X-File-Name":"receipt.pdf","X-File-Purpose":"payment_receipt"}});
+  assert.equal((await upload(customer)).status,409);
+  r = await request(`/api/orders/${oid}/quote`, {as:admin,method:"POST",body:{agreement:"نطاق اختبار إيصال التحويل البنكي",amount:99000,deliveryDate:"2037-01-01",terms:"اختبار فقط، لا تنفذ معاملة مالية حقيقية."}});
+  assert.equal(r.status,200);
+  assert.equal((await request(`/api/orders/${oid}/accept`,{as:customer,method:"POST",body:{accept:true,contractId:r.data.currentContract}})).status,200);
+  const otherLogin = await request("/api/auth/login", {method:"POST",body:{email:"bob@example.test",password:secret}});
+  const other = {...otherLogin.data,cookie:otherLogin.headers.get("set-cookie").split(";")[0]};
+  assert.equal((await upload(other)).status,404);
+  r = await upload(customer);
+  assert.equal(r.status,201);
+  assert.equal(r.data.status,"awaiting_payment");
+  assert.equal(r.data.payment,null);
+  const file = r.data.files[0];
+  assert.equal(file.purpose,"payment_receipt");
+  assert.equal(file.amount,99000);
+  assert.equal((await request(`/api/orders/${oid}/files/${file.id}`)).status,401);
+  assert.equal((await request(`/api/orders/${oid}/files/${file.id}`,{as:admin})).status,200);
+  assert.equal((await request(`/api/orders/${oid}/confirm-payment`,{as:customer,method:"POST",body:{reference:"receipt.pdf"}})).status,403);
+});
+
