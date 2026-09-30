@@ -3,6 +3,9 @@
   z-index: 80;
   font-family: inherit;
 }
+.ai-widget [hidden] {
+  display: none !important;
+}
 .ai-launcher {
   position: fixed;
   bottom: 25px;

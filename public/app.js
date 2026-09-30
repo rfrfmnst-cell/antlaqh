@@ -6,6 +6,9 @@ const state = {
   config: null,
   sequence: 0,
   challenge: null,
+  loginChallenge: null,
+  ready: false,
+  loading: null,
 };
 const escape = (value) =>
   String(value ?? "").replace(
@@ -93,8 +96,15 @@ const empty = (title, message, action = "") =>
   `<div class="empty"><div class="service-icon">${icon("file")}</div><h2>${title}</h2><p>${message}</p>${action}</div>`;
 const formData = (form) => Object.fromEntries(new FormData(form));
 const go = (path) => {
+  if (location.hash === "#" + path) return render();
   location.hash = path;
 };
+function clearSession() {
+  state.user = null;
+  state.csrf = "";
+  state.challenge = null;
+  state.loginChallenge = null;
+}
 function notify(message) {
   const el = $("#toast");
   el.textContent = message;
@@ -103,6 +113,8 @@ function notify(message) {
   state.toastTimer = setTimeout(() => (el.hidden = true), 5000);
 }
 async function api(path, options = {}) {
+  const requestUser = state.user;
+  const requestCsrf = state.csrf;
   const headers = { ...options.headers };
   if (
     options.body &&
@@ -119,11 +131,45 @@ async function api(path, options = {}) {
     ...options,
     headers,
   });
-  const data = await response
-    .json()
-    .catch(() => ({ error: "تعذر قراءة استجابة الخادم." }));
-  if (!response.ok) throw new Error(data.error || "تعذر إتمام العملية.");
+  let data;
+  try {
+    data = await response.json();
+  } catch {
+    if (response.ok) throw new Error("تعذر قراءة استجابة الخادم. حاول مجددًا.");
+    data = { error: "تعذر قراءة استجابة الخادم." };
+  }
+  if (!response.ok) {
+    const error = new Error(data?.error || "تعذر إتمام العملية.");
+    error.status = response.status;
+    if (
+      response.status === 401 &&
+      requestUser &&
+      state.user === requestUser &&
+      state.csrf === requestCsrf &&
+      !/^\/api\/auth\/(?:login|register|otp\/(?:send|check))$/.test(path)
+    ) {
+      clearSession();
+      error.sessionExpired = true;
+    }
+    throw error;
+  }
   return data;
+}
+async function initialize() {
+  if (state.ready) return;
+  if (!state.loading) {
+    state.loading = Promise.all([api("/api/config"), api("/api/session")])
+      .then(([config, session]) => {
+        state.config = config;
+        state.user = session.user || null;
+        state.csrf = session.csrf || "";
+        state.ready = true;
+      })
+      .finally(() => {
+        state.loading = null;
+      });
+  }
+  await state.loading;
 }
 const artwork = {
   website: {
@@ -229,6 +275,9 @@ function logo(compact = false) {
 function header(path) {
   const authed = !!state.user,
     admin = state.user?.role === "admin";
+  const businessPhone = state.config?.businessPhone || "+966553575760";
+  const businessEmail = state.config?.businessEmail || "antlaqh2030@gmail.com";
+  const phoneLabel = businessPhone === "+966553575760" ? "0553575760" : businessPhone;
   $("#header").innerHTML =
     `<div class="header-accent"></div><div class="wrap header-inner">${logo()}<nav class="main-nav" id="main-nav" aria-label="التنقل الرئيسي">${[
       ["/", "الرئيسية"],
@@ -244,7 +293,7 @@ function header(path) {
         "",
       )}</nav><div class="header-actions">${authed ? `<a class="user-chip" href="#${admin ? "/admin" : "/dashboard"}"><span class="avatar">${E(state.user.name.slice(0, 1))}</span><span class="user-name">${E(state.user.name.split(" ")[0])}</span></a>` : link("/login", "حسابي", "ghost login-link")}${link("/start", "ابدأ مشروعك " + icon("arrow"), "header-start")}<button class="btn ghost menu-button" data-action="menu" aria-label="فتح القائمة" aria-expanded="false" aria-controls="main-nav">${icon("menu")}</button></div></div>`;
   $("#footer").innerHTML =
-    `<div class="wrap footer-top"><div class="footer-brand">${logo(true)}<p>نصنع لمشروعك بداية مدروسة، وحضورًا رقميًا يعبّر عنه. من أول فكرة إلى تجربة تستحق أن تُشارك.</p><span class="footer-signature" dir="ltr">THOUGHTFULLY BUILT. READY TO GROW.</span></div><div class="footer-column"><h3>اكتشف إنطلاقة</h3><nav aria-label="اكتشف إنطلاقة"><a href="#/services">حلولنا الرقمية</a><a href="#/store">المتجر الرقمي</a><a href="#/about">قصتنا وطريقتنا</a><a href="#/start">ابدأ مشروعًا</a></nav></div><div class="footer-column"><h3>نحن بالقرب منك</h3><div class="footer-contact"><a href="tel:+966553575760" dir="ltr">0553575760</a><a href="mailto:antlaqh2030@gmail.com" dir="ltr">antlaqh2030@gmail.com</a></div><nav aria-label="المساعدة"><a href="#/dashboard">مساحة العميل</a><a href="#/support">الدعم والمساعدة</a><button type="button" data-assistant-open>تحدث مع المساعد الذكي ${icon("spark")}</button><a href="#/privacy">سياسة الخصوصية</a></nav></div></div><div class="wrap footer-bottom"><span>© ${new Date().getFullYear()} إنطلاقة للتجارة الإلكترونية. جميع الحقوق محفوظة.</span><a href="#/terms">الشروط والأحكام</a><span class="footer-dot">بدايات مدروسة. أثر مستمر.</span></div><a class="floating-contact" href="tel:+966553575760" aria-label="اتصل بإنطلاقة على 0553575760"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 3h4l2 5-3 2c2 3 3 4 6 6l2-3 5 2v4c0 1-1 2-2 2C10 21 3 14 3 5c0-1 1-2 2-2Z"/></svg><span>تواصل معنا</span></a>`;
+    `<div class="wrap footer-top"><div class="footer-brand">${logo(true)}<p>نصنع لمشروعك بداية مدروسة، وحضورًا رقميًا يعبّر عنه. من أول فكرة إلى تجربة تستحق أن تُشارك.</p><span class="footer-signature" dir="ltr">THOUGHTFULLY BUILT. READY TO GROW.</span></div><div class="footer-column"><h3>اكتشف إنطلاقة</h3><nav aria-label="اكتشف إنطلاقة"><a href="#/services">حلولنا الرقمية</a><a href="#/store">المتجر الرقمي</a><a href="#/about">قصتنا وطريقتنا</a><a href="#/start">ابدأ مشروعًا</a></nav></div><div class="footer-column"><h3>نحن بالقرب منك</h3><div class="footer-contact"><a href="tel:${E(businessPhone)}" dir="ltr">${E(phoneLabel)}</a><a href="mailto:${E(businessEmail)}" dir="ltr">${E(businessEmail)}</a></div><nav aria-label="المساعدة"><a href="#/dashboard">مساحة العميل</a><a href="#/support">الدعم والمساعدة</a><button type="button" data-assistant-open>تحدث مع المساعد الذكي ${icon("spark")}</button><a href="#/privacy">سياسة الخصوصية</a></nav></div></div><div class="wrap footer-bottom"><span>© ${new Date().getFullYear()} إنطلاقة للتجارة الإلكترونية. جميع الحقوق محفوظة.</span><a href="#/terms">الشروط والأحكام</a><span class="footer-dot">بدايات مدروسة. أثر مستمر.</span></div><a class="floating-contact" href="tel:${E(businessPhone)}" aria-label="اتصل بإنطلاقة على ${E(phoneLabel)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 3h4l2 5-3 2c2 3 3 4 6 6l2-3 5 2v4c0 1-1 2-2 2C10 21 3 14 3 5c0-1 1-2 2-2Z"/></svg><span>تواصل معنا</span></a>`;
 }
 function servicePrice(s, detailed = false) {
   if (!s.pricing) return "";
@@ -412,7 +461,9 @@ function contractCard(q, o, history = false) {
 }
 function paymentCard(o) {
   if (!o.amount) return "";
-  return `<section class="panel"><h2>ملخص الدفع</h2><p class="amount-large">${money(o.amount)}</p>${o.payment?.confirmed && !o.payment.revoked ? `<div class="notice">تم تأكيد استلام الدفع في ${date(o.payment.at)}.</div>${link("/invoice/" + o.id, "عرض إيصال الدفع", "secondary")}${o.type === "product" ? `<a class="btn spaced" href="/api/orders/${o.id}/download">${icon("download")} تنزيل المنتج</a>` : ""}` : o.status === "awaiting_payment" ? `<h3>تحويل بنكي — البنك الأهلي السعودي</h3><p class="small">حوّل المبلغ الموضح أعلاه، واذكر رقم الطلب في وصف التحويل.</p><div class="field"><label for="bank-iban">رقم الآيبان</label><input id="bank-iban" dir="ltr" readonly value="SA3610000044000001058010" aria-label="رقم الآيبان للبنك الأهلي السعودي"></div><p class="small muted">رقم الطلب: <strong dir="ltr">${E(o.number)}</strong></p>${o.files.filter(f => f.purpose === "payment_receipt").map(f => `<div class="file-row"><div><strong>إيصال تحويل مرفق</strong><small>${date(f.at)}</small></div><a class="btn secondary small" href="/api/orders/${o.id}/files/${f.id}">عرض الإيصال</a></div>`).join("")}${state.user.role !== "admin" ? `<form class="spaced" data-form="payment-receipt" data-id="${o.id}">${errors()}<div class="field"><label for="transfer-receipt">إرفاق إيصال التحويل</label><input id="transfer-receipt" name="file" type="file" accept=".pdf,.png,.jpg,.jpeg" required><p class="hint">PDF أو PNG أو JPEG، حتى 10 ميجابايت. الإيصال متاح لك وللإدارة فقط.</p></div><button class="btn" type="submit">إرسال الإيصال للمراجعة</button></form>` : ""}<div class="notice warning">رفع الإيصال لا يؤكد الدفع تلقائيًا؛ تؤكد الإدارة الدفع بعد التحقق من وصول التحويل.</div>` : `<p class="small muted">${o.payment?.revoked ? "أُلغي استحقاق هذه الدفعة. راجع فريق الدعم." : "يأتي الدفع بعد اعتماد العرض والعقد."}</p>`}</section>`;
+  const bank = state.config?.bankTransfer?.bank || "البنك الأهلي السعودي";
+  const iban = state.config?.bankTransfer?.iban || "SA3610000044000001058010";
+  return `<section class="panel"><h2>ملخص الدفع</h2><p class="amount-large">${money(o.amount)}</p>${o.payment?.confirmed && !o.payment.revoked ? `<div class="notice">تم تأكيد استلام الدفع في ${date(o.payment.at)}.</div>${link("/invoice/" + o.id, "عرض إيصال الدفع", "secondary")}${o.type === "product" ? `<a class="btn spaced" href="/api/orders/${o.id}/download">${icon("download")} تنزيل المنتج</a>` : ""}` : o.status === "awaiting_payment" ? `<h3>تحويل بنكي — ${E(bank)}</h3><p class="small">حوّل المبلغ الموضح أعلاه، واذكر رقم الطلب في وصف التحويل.</p><div class="field"><label for="bank-iban">رقم الآيبان</label><input id="bank-iban" dir="ltr" readonly value="${E(iban)}" aria-label="رقم الآيبان لـ${E(bank)}"></div><p class="small muted">رقم الطلب: <strong dir="ltr">${E(o.number)}</strong></p>${o.files.filter(f => f.purpose === "payment_receipt").map(f => `<div class="file-row"><div><strong>إيصال تحويل مرفق</strong><small>${date(f.at)}</small></div><a class="btn secondary small" href="/api/orders/${o.id}/files/${f.id}">عرض الإيصال</a></div>`).join("")}${state.user.role !== "admin" ? `<form class="spaced" data-form="payment-receipt" data-id="${o.id}">${errors()}<div class="field"><label for="transfer-receipt">إرفاق إيصال التحويل</label><input id="transfer-receipt" name="file" type="file" accept=".pdf,.png,.jpg,.jpeg" required><p class="hint">PDF أو PNG أو JPEG، حتى 10 ميجابايت. الإيصال متاح لك وللإدارة فقط.</p></div><button class="btn" type="submit">إرسال الإيصال للمراجعة</button></form>` : ""}<div class="notice warning">رفع الإيصال لا يؤكد الدفع تلقائيًا؛ تؤكد الإدارة الدفع بعد التحقق من وصول التحويل.</div>` : `<p class="small muted">${o.payment?.revoked ? "أُلغي استحقاق هذه الدفعة. راجع فريق الدعم." : "يأتي الدفع بعد اعتماد العرض والعقد."}</p>`}</section>`;
 }
 function adminOrderControls(o) {
   if (state.user.role !== "admin") return "";
@@ -467,7 +518,7 @@ async function checkout(pid) {
   const products = await api("/api/products"),
     p = products.find((p) => p.id === pid);
   if (!p) throw Error("المنتج غير متاح حاليًا.");
-  return `<div class="wrap"><div class="checkout">${pageHead("مراجعة طلب المنتج", "راجع تفاصيل المنتج قبل إنشاء الطلب.")}<section class="panel">${productImage(p, "checkout-cover")}<h2>${E(p.title)}</h2><p class="pre">${E(p.description)}</p><div class="invoice-total"><span>الإجمالي</span><span>${money(p.amount)}</span></div><form class="spaced" data-form="checkout" data-id="${p.id}">${errors()}<div class="notice">ينشئ هذا الزر طلب شراء فقط. الدفع بتحويل بنكي للبنك الأهلي السعودي مع إرفاق الإيصال داخل الطلب. يُتاح التنزيل بعد تأكيد الإدارة استلام المبلغ.</div><label class="check"><input name="acceptTerms" type="checkbox" required><span>اطلعت على وصف المنتج والسعر و<a href="#/terms" target="_blank" rel="noopener">شروط الشراء</a> وأوافق عليها.</span></label><button class="btn" type="submit">إنشاء طلب الشراء</button></form></section></div></div>`;
+  return `<div class="wrap"><div class="checkout">${pageHead("مراجعة طلب المنتج", "راجع تفاصيل المنتج قبل إنشاء الطلب.")}<section class="panel">${productImage(p, "checkout-cover")}<h2>${E(p.title)}</h2><p class="pre">${E(p.description)}</p><div class="invoice-total"><span>الإجمالي</span><span>${money(p.amount)}</span></div><form class="spaced" data-form="checkout" data-id="${p.id}">${errors()}<div class="notice">ينشئ هذا الزر طلب شراء فقط. الدفع بتحويل بنكي لـ${E(state.config?.bankTransfer?.bank || "البنك الأهلي السعودي")} مع إرفاق الإيصال داخل الطلب. يُتاح التنزيل بعد تأكيد الإدارة استلام المبلغ.</div><label class="check"><input name="acceptTerms" type="checkbox" required><span>اطلعت على وصف المنتج والسعر و<a href="#/terms" target="_blank" rel="noopener">شروط الشراء</a> وأوافق عليها.</span></label><button class="btn" type="submit">إنشاء طلب الشراء</button></form></section></div></div>`;
 }
 async function contracts(path) {
   const orders = (await api("/api/orders")).filter((o) => o.contracts.length);
@@ -582,7 +633,7 @@ function serviceDetail(sid) {
     "payments",
     "dropshipping",
   ].includes(s.id);
-  return `<div class="wrap"><nav class="breadcrumbs" aria-label="مسار الصفحة"><a href="#/services">خدماتنا</a><span>/</span><span>${E(s.title)}</span></nav><section class="service-detail"><div class="service-detail-copy"><span class="eyebrow">${E(s.category)}</span><h1>${E(s.title)}</h1><p>${E(s.description)}</p><div class="actions">${link("/start?service=" + s.id, "اطلب هذه الخدمة " + icon("arrow"))}<button class="btn secondary" type="button" data-assistant-open>استكشف مع المساعد ${icon("spark")}</button></div>${servicePrice(s, true)}<p class="service-assurance">عرض سعر ونطاق عمل واضح قبل البدء.</p></div><img class="detail-art" src="${artwork[s.id].image}" alt="${E(s.title)}" width="1536" height="1024"></section><section class="service-includes"><div><span class="eyebrow">تفاصيل تصنع بداية أفضل</span><h2>ما الذي نعمل عليه معك؟</h2><p>نحدّد المخرجات النهائية بحسب مشروعك في عرض الخدمة.</p></div><div class="includes-list">${(s.includes || []).map((item, i) => `<div><span>0${i + 1}</span><h3>${E(item)}</h3>${icon("check")}</div>`).join("")}</div></section>${external ? '<p class="service-fineprint">الرسوم والاشتراكات وحسابات الجهات الخارجية تُحدَّد حسب الاتفاق. تخضع الموافقات والنشر لشروط ومراجعة كل منصة.</p>' : ""}<section class="section">${processSteps()}</section></div>`;
+  return `<div class="wrap"><nav class="breadcrumbs" aria-label="مسار الصفحة"><a href="#/services">خدماتنا</a><span>/</span><span>${E(s.title)}</span></nav><section class="service-detail"><div class="service-detail-copy"><span class="eyebrow">${E(s.category)}</span><h1>${E(s.title)}</h1><p>${E(s.description)}</p><div class="actions">${link("/start?service=" + s.id, "اطلب هذه الخدمة " + icon("arrow"))}<button class="btn secondary" type="button" data-assistant-open>استكشف مع المساعد ${icon("spark")}</button></div>${servicePrice(s, true)}<p class="service-assurance">عرض سعر ونطاق عمل واضح قبل البدء.</p></div><img class="detail-art" src="${(artwork[s.id] || artwork.website).image}" alt="${E(s.title)}" width="1536" height="1024"></section><section class="service-includes"><div><span class="eyebrow">تفاصيل تصنع بداية أفضل</span><h2>ما الذي نعمل عليه معك؟</h2><p>نحدّد المخرجات النهائية بحسب مشروعك في عرض الخدمة.</p></div><div class="includes-list">${(s.includes || []).map((item, i) => `<div><span>0${i + 1}</span><h3>${E(item)}</h3>${icon("check")}</div>`).join("")}</div></section>${external ? '<p class="service-fineprint">الرسوم والاشتراكات وحسابات الجهات الخارجية تُحدَّد حسب الاتفاق. تخضع الموافقات والنشر لشروط ومراجعة كل منصة.</p>' : ""}<section class="section">${processSteps()}</section></div>`;
 }
 function legal(privacy) {
   return `<div class="wrap"><article class="legal panel"><div class="eyebrow">انطلاقة</div><h1>${privacy ? "سياسة الخصوصية" : "الشروط والأحكام"}</h1>${privacy ? `<h2>المساعد الذكي</h2><p>عند تفعيل المساعد وإرسال رسالة إليه، تُرسل رسائلك وسياق المحادثة إلى OpenAI لإنتاج الرد. لا نرسل إليه طلباتك الخاصة أو ملفاتك، ولا نحفظ المحادثة في قاعدة بيانات المنصة. تُدار بيانات المزود وفق سياسته. لا ترسل كلمات المرور أو بيانات الدفع.</p><h2>ما الذي نحفظه؟</h2><p>نحفظ الاسم والبريد الإلكتروني وبيانات الحساب، وتفاصيل الطلبات والعقود والموافقات، والرسائل والمرفقات وبيانات الدفع التي تسجلها الإدارة. عند توثيق رقم الجوال نحفظ الرقم وحالة التوثيق.</p><h2>لماذا نستخدم هذه البيانات؟</h2><p>لإدارة حسابك وتنفيذ طلباتك والرد على استفساراتك وحماية الوصول إلى ملفاتك. لا تعرض المنصة طلباتك ومرفقاتك للزوار أو العملاء الآخرين.</p><h2>من يصل إليها؟</h2><p>صاحب الحساب وإدارة انطلاقة بحسب الحاجة إلى تنفيذ الخدمة. عند تفعيل التحقق بالجوال يُرسل رقمك إلى مزود الرسائل لإرسال رمز التحقق. تخزَّن البيانات لدى مزود الاستضافة.</p><h2>ملفات الارتباط</h2><p>نستخدم ملف ارتباط ضروريًا لتسجيل الدخول وحماية الجلسة. تنتهي الجلسة عند تسجيل الخروج أو بعد انتهاء مدتها.</p><h2>طلبات الخصوصية</h2><p>يمكنك طلب مراجعة بياناتك أو تصحيحها أو حذفها عبر تذكرة دعم داخل حسابك. تخضع بيانات الطلبات والعقود المكتملة للحاجة إلى حفظ سجل التعامل.</p>` : `<h2>الحساب واستخدام المنصة</h2><p>استخدم معلومات صحيحة وحافظ على سرية كلمة المرور. لا ترفع محتوى لا تملك حق استخدامه، أو ملفات ضارة أو بيانات شخصية لا تحتاجها الخدمة.</p><h2>طلبات الخدمات</h2><p>إرسال طلب مشروع لا ينشئ التزامًا بالدفع. يتحدد نطاق العمل والسعر وموعد التسليم في العرض والعقد الذي تراجعه وتوافق عليه داخل حسابك.</p><h2>الموافقات والتعديلات</h2><p>تُحفظ موافقتك مع وقتها وإصدار الاتفاق. تغيير نطاق العمل أو السعر يحتاج اتفاقًا جديدًا. تبقى الإصدارات السابقة محفوظة في الطلب.</p><h2>المنتجات الرقمية والدفع</h2><p>راجع وصف المنتج والسعر قبل إنشاء الطلب. تتاح الملفات في حسابك بعد تأكيد الإدارة استلام الدفع. رفع إثبات التحويل لا يُعد تأكيدًا تلقائيًا للدفع.</p><h2>المراجعة والاسترداد</h2><p>إذا واجهت مشكلة في المنتج أو الخدمة، افتح تذكرة دعم توضح المشكلة ورقم الطلب لمراجعتها وفق الاتفاق والحقوق النظامية.</p><h2>حقوق الاستخدام</h2><p>تُحدد حقوق استخدام مخرجات الخدمة في الاتفاق. لا يجوز إعادة بيع الملفات الرقمية أو توزيعها إلا إذا كان وصف المنتج أو اتفاق منفصل يجيز ذلك.</p>`}<h2>التواصل</h2><p>للاستفسار عن هذه السياسة أو طلب المساعدة، استخدم <a class="text-link" href="#/support">الدعم والمساعدة</a>${state.config.businessEmail ? " أو البريد " + E(state.config.businessEmail) : ""}.</p></article></div>`;
@@ -597,6 +648,9 @@ async function render() {
   main.innerHTML =
     '<div class="page-loading" role="status">جارٍ التحميل…</div>';
   try {
+    await initialize();
+    if (seq !== state.sequence) return;
+    header(path);
     const privateRoute =
       [
         "/start",
@@ -656,8 +710,16 @@ async function render() {
     window.scrollTo({ top: 0, behavior: "instant" });
     main.focus({ preventScroll: true });
   } catch (e) {
-    if (seq === state.sequence)
+    if (seq !== state.sequence) return;
+    if (e.sessionExpired) {
+      header(path);
+      main.innerHTML = authRequired(raw);
+      notify("انتهت جلستك. سجّل الدخول لمتابعة طلبك.");
+    } else {
       main.innerHTML = `<div class="wrap section">${empty("تعذر فتح الصفحة", E(e.message), `<button class="btn" data-action="retry">حاول مجددًا</button> ${link("/", "الرئيسية", "secondary")}`)}</div>`;
+    }
+    document.title = `${main.querySelector("h1, h2")?.innerText || "تعذر فتح الصفحة"} | إنطلاقة للتجارة الإلكترونية`;
+    main.focus({ preventScroll: true });
   }
 }
 document.addEventListener("submit", async (event) => {
@@ -821,15 +883,36 @@ document.addEventListener("submit", async (event) => {
       notify("تم توثيق رقم الجوال.");
     }
   } catch (e) {
-    if (error) error.textContent = e.message;
-    else notify(e.message);
-    error?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    if (e.sessionExpired) {
+      await render();
+      notify("انتهت جلستك. سجّل الدخول ثم أعد إرسال الطلب.");
+    } else {
+      if (error && form.isConnected) {
+        error.textContent = e.message;
+        error.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      } else notify(e.message);
+    }
   } finally {
     button.disabled = false;
     button.textContent = old;
   }
 });
+function closeMenu(restoreFocus = false) {
+  const nav = $("#main-nav");
+  if (!nav?.classList.contains("open")) return;
+  nav.classList.remove("open");
+  const button = $('[data-action="menu"]');
+  button?.setAttribute("aria-expanded", "false");
+  if (restoreFocus) button?.focus();
+}
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeMenu(true);
+});
 document.addEventListener("click", async (event) => {
+  if (
+    event.target.closest("#main-nav a") ||
+    !event.target.closest('#main-nav, [data-action="menu"]')
+  ) closeMenu();
   const el = event.target.closest("[data-action]");
   if (!el) return;
   const action = el.dataset.action;
@@ -842,8 +925,7 @@ document.addEventListener("click", async (event) => {
       el.setAttribute("aria-expanded", String(open));
     } else if (action === "logout") {
       await api("/api/auth/logout", { method: "POST", body: {} });
-      state.user = null;
-      state.csrf = "";
+      clearSession();
       go("/");
       await render();
       notify("تم تسجيل الخروج.");
@@ -860,7 +942,8 @@ document.addEventListener("click", async (event) => {
     }
   } catch (e) {
     el.disabled = false;
-    notify(e.message);
+    if (e.sessionExpired) await render();
+    notify(e.sessionExpired ? "انتهت جلستك. سجّل الدخول مجددًا." : e.message);
   }
 });
 document.addEventListener("input", (event) => {
@@ -874,15 +957,7 @@ document.addEventListener("input", (event) => {
   }
 });
 window.addEventListener("hashchange", render);
-try {
-  [state.config, { user: state.user, csrf: state.csrf }] = await Promise.all([
-    api("/api/config"),
-    api("/api/session"),
-  ]);
-  await render();
-} catch (e) {
-  main.innerHTML = `<div class="wrap section"><div class="error">${E(e.message)} أعد تحميل الصفحة للمحاولة.</div></div>`;
-}
+await render();
 
 document.addEventListener("input", (event) => {
   if (!event.target.matches("[data-product-search]")) return;

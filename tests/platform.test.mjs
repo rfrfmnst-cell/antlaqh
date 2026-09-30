@@ -611,6 +611,10 @@ test("OTP verification and login bind phone and account; approved codes are sing
     });
     assert.equal(r.status, 200);
     const challenge = r.data.challengeId;
+    assert.equal((await request("/api/auth/phone/check", {
+      as: admin, method: "POST", body: { challengeId: challenge, code: "123456" },
+    })).status, 404);
+    assert.equal((await db.get("phone", challenge)).used, false);
     r = await request("/api/auth/phone/check", {
       as: alice,
       method: "POST",
@@ -806,5 +810,52 @@ test("bank receipts stay private and never confirm payment automatically", async
   assert.equal((await request(`/api/orders/${oid}/files/${file.id}`)).status,401);
   assert.equal((await request(`/api/orders/${oid}/files/${file.id}`,{as:admin})).status,200);
   assert.equal((await request(`/api/orders/${oid}/confirm-payment`,{as:customer,method:"POST",body:{reference:"receipt.pdf"}})).status,403);
+});
+
+test("concurrent duplicate registration preserves the winning account's phone login", async () => {
+  const { digest } = await import("../lib/security.js");
+  const mail = "parallel-register@example.test", number = "+966550000201", uid = digest(mail);
+  const insert = db.insert;
+  let userInserts = 0, release;
+  const secondInsert = new Promise((done) => { release = done; });
+  db.insert = async (kind, item, owner) => {
+    if (kind !== "user" || item.id !== uid) return insert(kind, item, owner);
+    if (++userInserts === 1) await secondInsert;
+    try { return await insert(kind, item, owner); }
+    finally { if (userInserts > 1) release(); }
+  };
+  try {
+    const payload = { name: "حساب متزامن", email: mail, phone: number, password: secret, acceptTerms: true };
+    const results = await Promise.all([
+      request("/api/auth/register", { method: "POST", body: payload }),
+      request("/api/auth/register", { method: "POST", body: payload }),
+    ]);
+    assert.deepEqual(results.map((r) => r.status).sort(), [201, 409]);
+    const login = await request("/api/auth/login", { method: "POST", body: { phone: number, password: secret } });
+    assert.equal(login.status, 200);
+    assert.equal(login.data.user.id, uid);
+  } finally { db.insert = insert; release(); }
+});
+
+test("concurrent password changes cannot both authenticate with the old password", async () => {
+  const registered = await request("/api/auth/register", { method: "POST", body: { name: "تغيير متزامن", email: "parallel-password@example.test", password: secret, acceptTerms: true } });
+  assert.equal(registered.status, 201);
+  const actor = { ...registered.data, cookie: registered.headers.get("set-cookie").split(";")[0] };
+  const update = db.update;
+  let arrivals = 0, release;
+  const ready = new Promise((done) => { release = done; });
+  db.update = async (kind, uid, fn, ...args) => {
+    if (kind === "user" && uid === actor.user.id) {
+      if (++arrivals === 2) release();
+      await ready;
+    }
+    return update(kind, uid, fn, ...args);
+  };
+  try {
+    const results = await Promise.all(["one", "two"].map((suffix) => request("/api/auth/password", {
+      as: actor, method: "POST", body: { currentPassword: secret, password: secret + suffix },
+    })));
+    assert.deepEqual(results.map((r) => r.status).sort(), [200, 409]);
+  } finally { db.update = update; release(); }
 });
 
