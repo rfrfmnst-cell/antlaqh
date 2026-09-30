@@ -301,7 +301,20 @@ async function api(req, res, url) {
       throw fail(403, "انتهت صلاحية الصفحة. أعد تحميلها ثم حاول.");
   }
   if (method === "GET" && path === "/api/health")
-    return json(res, 200, { status: "ok", version: "5.0.0" });
+    return json(res, 200, {
+      status: "ok",
+      version: "5.0.0",
+      ...(url.searchParams.has("verify-origin")
+        ? {
+            siteOrigin: origin,
+            originHeaderPresent: typeof req.headers.origin === "string",
+            originMatches: req.headers.origin === origin,
+            originHeaderNames: Object.keys(req.headers).filter((key) =>
+              /origin/i.test(key),
+            ),
+          }
+        : {}),
+    });
   if (method === "GET" && path === "/api/config")
     return json(res, 200, {
       services,
