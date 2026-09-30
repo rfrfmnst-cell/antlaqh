@@ -233,6 +233,9 @@ test("only admin may issue quotes; contract versions and acceptance are enforced
   assert.equal(r.status, 200);
   assert.equal(r.data.status, "awaiting_payment");
   const original = r.data.contracts[0];
+  assert.match(original.fingerprint, /^[a-f0-9]{64}$/);
+  assert.equal(original.acceptance.fingerprint, original.fingerprint);
+  assert.equal(original.acceptance.customer.email, "alice@example.test");
   r = await request(`/api/orders/${service.id}/quote`, {
     as: admin,
     method: "POST",
@@ -738,4 +741,41 @@ test("product artwork is an admin-only safe catalog choice", async () => {
     ).status,
     401,
   );
+});
+
+test("phone password login preserves verification boundaries and unique ownership", async () => {
+  const phone = "0550000101";
+  let r = await request("/api/auth/register", {method:"POST",body:{name:"عميل جوال",email:"phone@example.test",phone,password:secret,acceptTerms:true}});
+  assert.equal(r.status,201);
+  assert.equal(r.data.user.loginPhone,"+966550000101");
+  assert.equal(r.data.user.phoneVerified,false);
+  const phoneUser={...r.data,cookie:r.headers.get("set-cookie").split(";")[0]};
+  r=await request("/api/auth/login",{method:"POST",body:{phone:"+966550000101",password:secret}});
+  assert.equal(r.status,200);assert.equal(r.data.user.id,phoneUser.user.id);
+  assert.equal((await request("/api/auth/register",{method:"POST",body:{name:"عميل مكرر",email:"duplicate-phone@example.test",phone:"+966550000101",password:secret,acceptTerms:true}})).status,409);
+  assert.equal((await request("/api/auth/login",{method:"POST",body:{phone,password:"wrong-password"}})).status,401);
+  assert.equal((await request("/api/auth/login-phone",{as:phoneUser,method:"POST",body:{phone:"0550000102",currentPassword:"wrong-password"}})).status,400);
+  assert.equal((await request("/api/auth/login-phone",{as:phoneUser,method:"POST",body:{phone:"0550000102",currentPassword:secret}})).status,409);
+});
+
+test("legacy accounts can bind a unique mobile without losing their orders", async()=>{
+  let r=await request("/api/auth/register",{method:"POST",body:{name:"حساب قديم",email:"legacy-phone@example.test",password:secret,acceptTerms:true}});
+  assert.equal(r.status,201);
+  const legacy={...r.data,cookie:r.headers.get("set-cookie").split(";")[0]};
+  r=await request("/api/auth/login-phone",{as:legacy,method:"POST",body:{phone:"0550000103",currentPassword:secret}});
+  assert.equal(r.status,200);assert.equal(r.data.user.id,legacy.user.id);
+  assert.equal((await request("/api/auth/login",{method:"POST",body:{phone:"0550000103",password:secret}})).status,200);
+  assert.equal((await request("/api/session",{as:legacy})).data.user,null);
+});
+
+test("cancelled orders and past delivery dates cannot produce contracts", async()=>{
+  const customer=await request("/api/auth/login",{method:"POST",body:{email:"phone@example.test",password:secret}});
+  const user={...customer.data,cookie:customer.headers.get("set-cookie").split(";")[0]};
+  const order=await request("/api/orders",{as:user,method:"POST",body:{service:"website",title:"فحص حماية العقود",description:"طلب اختبار لضمان سلامة دورة إصدار العقود."}});
+  assert.equal(order.status,201);
+  assert.equal(order.data.advertisedPrice.from,99000);
+  const quote={agreement:"تنفيذ المشروع حسب النطاق المكتوب والمحدد.",amount:99000,deliveryDate:"2037-01-15",terms:"الشروط والمخرجات والتعديلات محددة حسب الاتفاق."};
+  assert.equal((await request(`/api/orders/${order.data.id}/quote`,{as:admin,method:"POST",body:{...quote,deliveryDate:"2000-01-01"}})).status,400);
+  assert.equal((await request(`/api/orders/${order.data.id}/status`,{as:admin,method:"POST",body:{status:"cancelled"}})).status,200);
+  assert.equal((await request(`/api/orders/${order.data.id}/quote`,{as:admin,method:"POST",body:quote})).status,409);
 });

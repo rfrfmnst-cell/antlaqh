@@ -143,9 +143,11 @@ input.addEventListener("keydown", (event) => {
   }
 });
 document.addEventListener("click", (event) => {
-  if (event.target.closest("[data-assistant-open]")) {
+  const trigger = event.target.closest("[data-assistant-open]");
+  if (trigger) {
     event.preventDefault();
-    open();
+    const draft = trigger.hasAttribute("data-assistant-draft") ? document.getElementById("home-ai-draft")?.value || "" : trigger.dataset.assistantPrompt || "";
+    open().then(() => { if (draft) input.value = draft.slice(0, 3000); if (ready) input.focus(); });
   }
 });
 launcher.addEventListener("click", open);

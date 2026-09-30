@@ -13,6 +13,7 @@ import {
   text,
   email,
   password,
+  phone as normalizePhone,
   hashPassword,
   checkPassword,
   publicUser,
@@ -278,6 +279,22 @@ if (process.env.BOOTSTRAP_ADMIN_EMAIL && process.env.BOOTSTRAP_ADMIN_PASSWORD) {
     );
 }
 
+async function claimLoginPhone(number, userId) {
+  const key = digest(number);
+  const verified = await db.get("verifiedPhone", key);
+  if (verified && verified.userId !== userId) throw fail(409, "رقم الجوال مرتبط بحساب آخر.");
+  const existing = await db.get("loginPhone", key);
+  if (existing) {
+    if (existing.userId !== userId) throw fail(409, "رقم الجوال مرتبط بحساب آخر.");
+    return false;
+  }
+  try { await db.insert("loginPhone", { id: key, userId }, userId); }
+  catch (error) {
+    if (error.code === "ER_DUP_ENTRY" || String(error.message).includes("UNIQUE constraint")) throw fail(409, "رقم الجوال مرتبط بحساب آخر.");
+    throw error;
+  }
+  return true;
+}
 async function api(req, res, url) {
   const path = url.pathname,
     method = req.method;
@@ -320,8 +337,8 @@ async function api(req, res, url) {
       services,
       smsReady,
       assistantReady: assistant.ready,
-      businessEmail: process.env.BUSINESS_EMAIL || "",
-      businessPhone: process.env.BUSINESS_PHONE || "",
+      businessEmail: process.env.BUSINESS_EMAIL || "antlaqh2030@gmail.com",
+      businessPhone: process.env.BUSINESS_PHONE || "+966553575760",
       payments: "manual",
       environment: production ? "production" : "development",
     });
@@ -354,9 +371,15 @@ async function api(req, res, url) {
     if (b.acceptTerms !== true)
       throw fail(400, "يلزم الاطلاع على الشروط والخصوصية والموافقة عليهما.");
     u.termsAcceptedAt = now();
+    let phoneClaim;
+    if (b.phone) {
+      u.loginPhone = normalizePhone(b.phone);
+      phoneClaim = await claimLoginPhone(u.loginPhone, uid);
+    }
     try {
       await db.insert("user", u, uid);
     } catch (e) {
+      if (phoneClaim) await db.remove("loginPhone", digest(u.loginPhone));
       if (
         e.code === "ER_DUP_ENTRY" ||
         String(e.message).includes("UNIQUE constraint")
@@ -367,18 +390,23 @@ async function api(req, res, url) {
     return json(res, 201, await login(res, u));
   }
   if (method === "POST" && path === "/api/auth/login") {
-    const b = await jsonBody(req),
-      mail = email(b.email);
-    rate(`login:${digest(mail)}`, 10);
+    const b = await jsonBody(req);
+    const identifier = b.phone ? normalizePhone(b.phone) : email(b.email);
+    rate(`login:${digest(identifier)}`, 10);
     rate(`login-ip:${ip}`, 35);
-    const u = await db.get("user", digest(mail));
+    let uid = digest(identifier);
+    if (b.phone) {
+      const mapping = await db.get("loginPhone", digest(identifier)) || await db.get("verifiedPhone", digest(identifier));
+      uid = mapping?.userId || "missing";
+    }
+    const u = await db.get("user", uid);
     const valid =
       typeof b.password === "string" &&
       b.password.length <= 128 &&
       u &&
       (await checkPassword(b.password, u.password));
     if (!valid || u.disabled)
-      throw fail(401, "البريد أو كلمة المرور غير صحيحة.");
+      throw fail(401, "بيانات الدخول أو كلمة المرور غير صحيحة.");
     if (auth) await db.remove("session", auth.s.id);
     return json(res, 200, await login(res, u));
   }
@@ -386,6 +414,23 @@ async function api(req, res, url) {
     await db.remove("session", auth.s.id);
     cookie(res, "", 0);
     return json(res, 200, { ok: true });
+  }
+  if (method === "POST" && path === "/api/auth/login-phone") {
+    const b = await jsonBody(req);
+    rate(`bind-phone:${auth.u.id}`, 5);
+    if (typeof b.currentPassword !== "string" || b.currentPassword.length > 128 || !(await checkPassword(b.currentPassword, auth.u.password)))
+      throw fail(400, "كلمة المرور الحالية غير صحيحة.");
+    const number = normalizePhone(b.phone);
+    // A login identifier is immutable here; changing it requires verified support.
+    if (auth.u.loginPhone && auth.u.loginPhone !== number) throw fail(409, "رقم الدخول مرتبط بالفعل. تواصل مع الدعم لتغييره.");
+    const claimed = await claimLoginPhone(number, auth.u.id);
+    let updated;
+    try { updated = await db.update("user", auth.u.id, u => {
+      if (u.loginPhone && u.loginPhone !== number) throw fail(409, "رقم الدخول مرتبط بالفعل.");
+      u.loginPhone = number; u.passwordVersion = (u.passwordVersion || 0) + 1; return u;
+    }); }
+    catch (error) { if (claimed) await db.remove("loginPhone", digest(number)); throw error; }
+    return json(res, 200, await login(res, updated));
   }
   if (method === "POST" && path === "/api/auth/password") {
     const b = await jsonBody(req);
@@ -501,6 +546,7 @@ async function api(req, res, url) {
       return x;
     });
     const phoneKey = digest(c.phone);
+    await claimLoginPhone(c.phone, auth.u.id);
     let registration = await db.get("verifiedPhone", phoneKey);
     if (!registration) {
       try {
@@ -567,6 +613,7 @@ async function api(req, res, url) {
       if (!service) throw fail(400, "اختر الخدمة المطلوبة.");
       o.type = "service";
       o.service = service.id;
+      o.advertisedPrice = { ...service.pricing };
       o.title = text(b.title, 3, 160);
       o.description = text(b.description, 15, 8000);
       o.budget = text(b.budget || "", 0, 100);
@@ -657,6 +704,11 @@ async function api(req, res, url) {
         amount: amount(b.amount),
         deliveryDate: text(b.deliveryDate, 10, 10),
         terms: text(b.terms, 10, 10000),
+        parties: {
+          provider: "إنطلاقة للتجارة الإلكترونية",
+          customer: { ...o.customer },
+        },
+        currency: "SAR",
         createdAt: now(),
         acceptedAt: null,
       };
@@ -666,10 +718,19 @@ async function api(req, res, url) {
         new Date(q.deliveryDate).toISOString().slice(0, 10) !== q.deliveryDate
       )
         throw fail(400, "أدخل تاريخ التسليم الصحيح.");
+      if (q.deliveryDate < new Date().toISOString().slice(0, 10))
+        throw fail(400, "تاريخ التسليم لا يمكن أن يكون في الماضي.");
       const result = await db.update("order", oid, (x) => {
+        if (!["received", "reviewing", "quoted", "awaiting_payment"].includes(x.status))
+          throw fail(409, "لا يمكن إصدار عرض لطلب مُلغى أو بدأ تنفيذه.");
         if (x.payment?.confirmed && !x.payment.revoked)
           throw fail(409, "لا يمكن تعديل عرض مدفوع.");
         q.version = x.contracts.length + 1;
+        q.fingerprint = digest(JSON.stringify({
+          id: q.id, version: q.version, agreement: q.agreement,
+          amount: q.amount, deliveryDate: q.deliveryDate, terms: q.terms,
+          parties: q.parties, currency: q.currency,
+        }));
         x.contracts.push(q);
         x.currentContract = q.id;
         x.amount = q.amount;
@@ -690,6 +751,13 @@ async function api(req, res, url) {
           throw fail(409, "العرض تغيّر أو لم يعد بانتظار الموافقة.");
         q.acceptedAt = now();
         q.acceptedBy = auth.u.id;
+        q.acceptance = {
+          customer: { ...x.customer },
+          at: q.acceptedAt,
+          contractId: q.id,
+          version: q.version,
+          fingerprint: q.fingerprint || null,
+        };
         x.status = "awaiting_payment";
         event(x, "وافق العميل على العرض والعقد", auth.u);
         return x;
