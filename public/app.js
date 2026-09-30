@@ -137,7 +137,138 @@ const artwork = {
     image: "/assets/catalog-apps.webp",
   },
   payments: {
- كنا هدفك، ونساعدك على تحديد البداية.</p>${link("/start", "لنتحدث عن مشروعك " + icon("arrow"), "secondary")}</article>`
+    label: "ربط قنوات الدفع",
+    note: "تجارة إلكترونية",
+    image: "/assets/catalog-payments.webp",
+  },
+  store: {
+    label: "تصميم المتاجر الإلكترونية",
+    note: "تجارة إلكترونية",
+    image: "/assets/catalog-store.webp",
+  },
+  identity: {
+    label: "الهوية البصرية",
+    note: "تصميم ومحتوى",
+    image: "/assets/catalog-identity.webp",
+  },
+  marketing: {
+    label: "التسويق الإلكتروني",
+    note: "تسويق ونمو",
+    image: "/assets/catalog-marketing.webp",
+  },
+  dropshipping: {
+    label: "متاجر الدروبشيبينغ",
+    note: "تجارة إلكترونية",
+    image: "/assets/catalog-dropshipping.webp",
+  },
+  noon: {
+    label: "كن بائعًا على نون",
+    note: "أسواق إلكترونية",
+    image: "/assets/catalog-noon.webp",
+  },
+  amazon: {
+    label: "كن بائعًا على أمازون",
+    note: "أسواق إلكترونية",
+    image: "/assets/catalog-amazon.webp",
+  },
+  ai: {
+    label: "ربط وتوظيف الذكاء الاصطناعي",
+    note: "تطوير وبرمجة",
+    image: "/assets/catalog-ai.webp",
+  },
+  consulting: {
+    label: "استشر مختصًا",
+    note: "استشارات وتعلّم",
+    image: "/assets/catalog-consulting.webp",
+  },
+  platforms: {
+    label: "بناء المنصات الإلكترونية",
+    note: "تطوير وبرمجة",
+    image: "/assets/catalog-platforms.webp",
+  },
+  content: {
+    label: "التسويق بالمحتوى",
+    note: "تصميم ومحتوى",
+    image: "/assets/catalog-content.webp",
+  },
+  academy: {
+    label: "تعلّم التجارة الإلكترونية",
+    note: "استشارات وتعلّم",
+    image: "/assets/catalog-academy.webp",
+  },
+};
+function coverKey(p) {
+  if (Object.hasOwn(artwork, p.cover)) return p.cover;
+  const context = String(
+    (p.category || "") + " " + (p.title || ""),
+  ).toLowerCase();
+  if (/تسويق|حمل|marketing|social|ads/.test(context)) return "marketing";
+  if (/متجر|تجار|store|commerce/.test(context)) return "store";
+  if (/تطبيق|نظام|برمج|app|software/.test(context)) return "apps";
+  if (/محتوى|تصميم|قالب|دليل|كتاب|content|brand|book|template/.test(context))
+    return "content";
+  return "website";
+}
+function productImage(p, extra = "") {
+  return `<div class="product-cover ${extra}"><img src="${artwork[coverKey(p)].image}" alt="صورة توضيحية لـ${E(p.title)}" loading="lazy" width="1024" height="1024"><span class="cover-label">${E(p.category)}</span></div>`;
+}
+function coverPicker(p = {}) {
+  const selected = coverKey(p);
+  return `<fieldset class="cover-picker"><legend>الصورة المناسبة للمنتج</legend><p class="hint">اختر الصورة الأقرب إلى محتوى المنتج.</p><div class="cover-options">${Object.entries(
+    artwork,
+  )
+    .map(
+      ([key, a]) =>
+        `<label class="cover-option"><input type="radio" name="cover" value="${key}" ${key === selected ? "checked" : ""}><img src="${a.image}" alt="" loading="lazy"><span>${a.label}</span></label>`,
+    )
+    .join("")}</div></fieldset>`;
+}
+function logo(compact = false) {
+  return `<a class="brand ${compact ? "brand-footer" : ""}" href="#/" aria-label="إنطلاقة للتجارة الإلكترونية، الصفحة الرئيسية"><img class="brand-logo" src="/assets/brand-logo-transparent.png" alt="شعار إنطلاقة" width="112" height="96"><span class="brand-name">إنطلاقة<span>للتجارة الإلكترونية</span></span></a>`;
+}
+function header(path) {
+  const authed = !!state.user,
+    admin = state.user?.role === "admin";
+  $("#header").innerHTML =
+    `<div class="header-accent"></div><div class="wrap header-inner">${logo()}<nav class="main-nav" id="main-nav" aria-label="التنقل الرئيسي">${[
+      ["/", "الرئيسية"],
+      ["/services", "حلولنا"],
+      ["/store", "المتجر"],
+      ["/about", "عن إنطلاقة"],
+    ]
+      .map(
+        ([p, l]) =>
+          `<a href="#${p}" class="${path === p ? "active" : ""}" ${path === p ? 'aria-current="page"' : ""}>${l}</a>`,
+      )
+      .join(
+        "",
+      )}</nav><div class="header-actions">${authed ? `<a class="user-chip" href="#${admin ? "/admin" : "/dashboard"}"><span class="avatar">${E(state.user.name.slice(0, 1))}</span><span class="user-name">${E(state.user.name.split(" ")[0])}</span></a>` : link("/login", "حسابي", "ghost login-link")}${link("/start", "ابدأ مشروعك " + icon("arrow"), "header-start")}<button class="btn ghost menu-button" data-action="menu" aria-label="فتح القائمة" aria-expanded="false" aria-controls="main-nav">${icon("menu")}</button></div></div>`;
+  $("#footer").innerHTML =
+    `<div class="wrap footer-top"><div class="footer-brand">${logo(true)}<p>نصنع لمشروعك بداية مدروسة، وحضورًا رقميًا يعبّر عنه. من أول فكرة إلى تجربة تستحق أن تُشارك.</p><span class="footer-signature" dir="ltr">THOUGHTFULLY BUILT. READY TO GROW.</span></div><div class="footer-column"><h3>اكتشف إنطلاقة</h3><nav aria-label="اكتشف إنطلاقة"><a href="#/services">حلولنا الرقمية</a><a href="#/store">المتجر الرقمي</a><a href="#/about">قصتنا وطريقتنا</a><a href="#/start">ابدأ مشروعًا</a></nav></div><div class="footer-column"><h3>نحن بالقرب منك</h3><div class="footer-contact"><a href="tel:+966553575760" dir="ltr">0553575760</a><a href="mailto:antlaqh2030@gmail.com" dir="ltr">antlaqh2030@gmail.com</a></div><nav aria-label="المساعدة"><a href="#/dashboard">مساحة العميل</a><a href="#/support">الدعم والمساعدة</a><button type="button" data-assistant-open>تحدث مع المساعد الذكي ${icon("spark")}</button><a href="#/privacy">سياسة الخصوصية</a></nav></div></div><div class="wrap footer-bottom"><span>© ${new Date().getFullYear()} إنطلاقة للتجارة الإلكترونية. جميع الحقوق محفوظة.</span><a href="#/terms">الشروط والأحكام</a><span class="footer-dot">بدايات مدروسة. أثر مستمر.</span></div><a class="floating-contact" href="tel:+966553575760" aria-label="اتصل بإنطلاقة على 0553575760"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 3h4l2 5-3 2c2 3 3 4 6 6l2-3 5 2v4c0 1-1 2-2 2C10 21 3 14 3 5c0-1 1-2 2-2Z"/></svg><span>تواصل معنا</span></a>`;
+}
+function servicePrice(s, detailed = false) {
+  if (!s.pricing) return "";
+  return `<div class="service-price"><span>تبدأ من</span><strong>${money(s.pricing.from)}</strong><span>${E(s.pricing.unit)}</span>${detailed ? `<p>${E(s.pricing.scope)}</p><small>${E(s.pricing.note)}</small>` : ""}</div>`;
+}
+function homepageAssistant() {
+  return `<section class="homepage-assistant wrap" aria-labelledby="home-ai-title"><div class="home-ai-heading"><span class="home-ai-avatar">${icon("spark")}</span><div><span class="eyebrow">مساعد إنطلاقة</span><h2 id="home-ai-title">أخبرنا عن فكرتك، ولنرتّب بدايتك.</h2><p>اسأل عن الخدمات والأسعار ونطاق مشروعك.</p></div></div><div class="home-ai-entry"><label class="sr-only" for="home-ai-draft">سؤالك لمساعد إنطلاقة</label><textarea id="home-ai-draft" rows="2" maxlength="3000" placeholder="أريد متجرًا إلكترونيًا… ما الباقة المناسبة؟"></textarea><button type="button" class="btn" data-assistant-open data-assistant-draft>افتح المحادثة ${icon("arrow")}</button></div><div class="home-ai-shortcuts"><button type="button" data-assistant-open data-assistant-prompt="ما أسعار باقات المتاجر ونطاقها؟">أسعار المتاجر</button><button type="button" data-assistant-open data-assistant-prompt="كيف تبدأ رحلة عرض السعر والعقد؟">كيف نبدأ المشروع؟</button><a href="#/services">استعرض الخدمات مباشرة</a></div><p class="small muted">${state.config.assistantReady ? "الردود الذكية متاحة الآن." : "الردود الذكية بانتظار التفعيل؛ الخدمات والأسعار متاحة مباشرة."}</p></section>`;
+}
+function serviceCards({ compact = false } = {}) {
+  return (
+    (compact
+      ? state.config.services.filter((s) =>
+          ["website", "store", "apps", "identity", "ai", "marketing"].includes(
+            s.id,
+          ),
+        )
+      : state.config.services
+    )
+      .map((s, index) => {
+        const art = artwork[s.id] || artwork.website;
+        return `<article class="service-card ${compact ? "compact" : ""}" data-service-text="${E((s.title + " " + s.description).toLowerCase())}" data-service-category="${E(s.category)}"><a class="service-art" href="#/service/${E(s.id)}" tabindex="-1" aria-hidden="true"><img src="${art.image}" alt="" width="1024" height="1024" loading="lazy"><span class="art-index" dir="ltr">${String(index + 1).padStart(2, "0")} /</span><span class="art-icon">${icon(s.icon)}</span></a><div class="service-body"><span class="category">${E(s.category)}</span><h3><a href="#/service/${E(s.id)}">${E(s.title)}</a></h3><p>${E(s.description)}</p>${servicePrice(s)}<a class="service-link" href="#/service/${E(s.id)}"><span>اكتشف الحل المناسب</span>${icon("arrow")}</a></div></article>`;
+      })
+      .join("") +
+    `<article class="service-card cta-card" data-service-extra><span class="eyebrow">مساحة للأفكار الجديدة</span><div class="cta-orbit" aria-hidden="true">${icon("spark")}</div><h3>فكرتك مختلفة؟<br>لنصنع لها طريقًا.</h3><p>لا تحتاج إلى معرفة كل التفاصيل. شاركنا هدفك، ونساعدك على تحديد البداية.</p>${link("/start", "لنتحدث عن مشروعك " + icon("arrow"), "secondary")}</article>`
   );
 }
 function processSteps() {
