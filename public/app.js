@@ -142,7 +142,200 @@ const artwork = {
     image: "/assets/catalog-payments.webp",
   },
   store: {
-    label: "تصميم المتاجر الإلكترونيplaceholder="مثل: من 5,000 إلى 10,000 ر.س"')}${field("targetDate", "موعد الإطلاق المستهدف (اختياري)", "date")}</div><button class="btn" type="submit">إرسال طلب المشروع</button></form></section><aside><section class="panel"><div class="service-icon">${icon("spark")}</div><h2>ماذا يحدث بعد الإرسال؟</h2><ol class="feature-list"><li><strong>01</strong> نراجع الفكرة والتفاصيل.</li><li><strong>02</strong> نتواصل معك لاستكمال المتطلبات.</li><li><strong>03</strong> يصلك عرض سعر وعقد للمراجعة.</li><li><strong>04</strong> نبدأ التنفيذ بعد الاتفاق وتأكيد الدفع.</li></ol></section><div class="notice">إرسال الطلب لا يلزمك بالدفع. ستراجع نطاق العمل والسعر قبل الموافقة.</div></aside></div></div>`;
+    label: "تصميم المتاجر الإلكترونية",
+    note: "تجارة إلكترونية",
+    image: "/assets/catalog-store.webp",
+  },
+  identity: {
+    label: "الهوية البصرية",
+    note: "تصميم ومحتوى",
+    image: "/assets/catalog-identity.webp",
+  },
+  marketing: {
+    label: "التسويق الإلكتروني",
+    note: "تسويق ونمو",
+    image: "/assets/catalog-marketing.webp",
+  },
+  dropshipping: {
+    label: "متاجر الدروبشيبينغ",
+    note: "تجارة إلكترونية",
+    image: "/assets/catalog-dropshipping.webp",
+  },
+  noon: {
+    label: "كن بائعًا على نون",
+    note: "أسواق إلكترونية",
+    image: "/assets/catalog-noon.webp",
+  },
+  amazon: {
+    label: "كن بائعًا على أمازون",
+    note: "أسواق إلكترونية",
+    image: "/assets/catalog-amazon.webp",
+  },
+  ai: {
+    label: "ربط وتوظيف الذكاء الاصطناعي",
+    note: "تطوير وبرمجة",
+    image: "/assets/catalog-ai.webp",
+  },
+  consulting: {
+    label: "استشر مختصًا",
+    note: "استشارات وتعلّم",
+    image: "/assets/catalog-consulting.webp",
+  },
+  platforms: {
+    label: "بناء المنصات الإلكترونية",
+    note: "تطوير وبرمجة",
+    image: "/assets/catalog-platforms.webp",
+  },
+  content: {
+    label: "التسويق بالمحتوى",
+    note: "تصميم ومحتوى",
+    image: "/assets/catalog-content.webp",
+  },
+  academy: {
+    label: "تعلّم التجارة الإلكترونية",
+    note: "استشارات وتعلّم",
+    image: "/assets/catalog-academy.webp",
+  },
+};
+function coverKey(p) {
+  if (Object.hasOwn(artwork, p.cover)) return p.cover;
+  const context = String(
+    (p.category || "") + " " + (p.title || ""),
+  ).toLowerCase();
+  if (/تسويق|حمل|marketing|social|ads/.test(context)) return "marketing";
+  if (/متجر|تجار|store|commerce/.test(context)) return "store";
+  if (/تطبيق|نظام|برمج|app|software/.test(context)) return "apps";
+  if (/محتوى|تصميم|قالب|دليل|كتاب|content|brand|book|template/.test(context))
+    return "content";
+  return "website";
+}
+function productImage(p, extra = "") {
+  return `<div class="product-cover ${extra}"><img src="${artwork[coverKey(p)].image}" alt="صورة توضيحية لـ${E(p.title)}" loading="lazy" width="1024" height="1024"><span class="cover-label">${E(p.category)}</span></div>`;
+}
+function coverPicker(p = {}) {
+  const selected = coverKey(p);
+  return `<fieldset class="cover-picker"><legend>الصورة المناسبة للمنتج</legend><p class="hint">اختر الصورة الأقرب إلى محتوى المنتج.</p><div class="cover-options">${Object.entries(
+    artwork,
+  )
+    .map(
+      ([key, a]) =>
+        `<label class="cover-option"><input type="radio" name="cover" value="${key}" ${key === selected ? "checked" : ""}><img src="${a.image}" alt="" loading="lazy"><span>${a.label}</span></label>`,
+    )
+    .join("")}</div></fieldset>`;
+}
+function logo(compact = false) {
+  return `<a class="brand ${compact ? "brand-footer" : ""}" href="#/" aria-label="إنطلاقة للتجارة الإلكترونية، الصفحة الرئيسية"><img class="brand-logo" src="/assets/brand-logo-transparent.png" alt="شعار إنطلاقة" width="112" height="96"><span class="brand-name">إنطلاقة<span>للتجارة الإلكترونية</span></span></a>`;
+}
+function header(path) {
+  const authed = !!state.user,
+    admin = state.user?.role === "admin";
+  $("#header").innerHTML =
+    `<div class="header-accent"></div><div class="wrap header-inner">${logo()}<nav class="main-nav" id="main-nav" aria-label="التنقل الرئيسي">${[
+      ["/", "الرئيسية"],
+      ["/services", "حلولنا"],
+      ["/store", "المتجر"],
+      ["/about", "عن إنطلاقة"],
+    ]
+      .map(
+        ([p, l]) =>
+          `<a href="#${p}" class="${path === p ? "active" : ""}" ${path === p ? 'aria-current="page"' : ""}>${l}</a>`,
+      )
+      .join(
+        "",
+      )}</nav><div class="header-actions">${authed ? `<a class="user-chip" href="#${admin ? "/admin" : "/dashboard"}"><span class="avatar">${E(state.user.name.slice(0, 1))}</span><span class="user-name">${E(state.user.name.split(" ")[0])}</span></a>` : link("/login", "حسابي", "ghost login-link")}${link("/start", "ابدأ مشروعك " + icon("arrow"), "header-start")}<button class="btn ghost menu-button" data-action="menu" aria-label="فتح القائمة" aria-expanded="false" aria-controls="main-nav">${icon("menu")}</button></div></div>`;
+  $("#footer").innerHTML =
+    `<div class="wrap footer-top"><div class="footer-brand">${logo(true)}<p>نصنع لمشروعك بداية مدروسة، وحضورًا رقميًا يعبّر عنه. من أول فكرة إلى تجربة تستحق أن تُشارك.</p><span class="footer-signature" dir="ltr">THOUGHTFULLY BUILT. READY TO GROW.</span></div><div class="footer-column"><h3>اكتشف إنطلاقة</h3><nav aria-label="اكتشف إنطلاقة"><a href="#/services">حلولنا الرقمية</a><a href="#/store">المتجر الرقمي</a><a href="#/about">قصتنا وطريقتنا</a><a href="#/start">ابدأ مشروعًا</a></nav></div><div class="footer-column"><h3>نحن بالقرب منك</h3><div class="footer-contact"><a href="tel:+966553575760" dir="ltr">0553575760</a><a href="mailto:antlaqh2030@gmail.com" dir="ltr">antlaqh2030@gmail.com</a></div><nav aria-label="المساعدة"><a href="#/dashboard">مساحة العميل</a><a href="#/support">الدعم والمساعدة</a><button type="button" data-assistant-open>تحدث مع المساعد الذكي ${icon("spark")}</button><a href="#/privacy">سياسة الخصوصية</a></nav></div></div><div class="wrap footer-bottom"><span>© ${new Date().getFullYear()} إنطلاقة للتجارة الإلكترونية. جميع الحقوق محفوظة.</span><a href="#/terms">الشروط والأحكام</a><span class="footer-dot">بدايات مدروسة. أثر مستمر.</span></div><a class="floating-contact" href="tel:+966553575760" aria-label="اتصل بإنطلاقة على 0553575760"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 3h4l2 5-3 2c2 3 3 4 6 6l2-3 5 2v4c0 1-1 2-2 2C10 21 3 14 3 5c0-1 1-2 2-2Z"/></svg><span>تواصل معنا</span></a>`;
+}
+function servicePrice(s, detailed = false) {
+  if (!s.pricing) return "";
+  return `<div class="service-price"><span>تبدأ من</span><strong>${money(s.pricing.from)}</strong><span>${E(s.pricing.unit)}</span>${detailed ? `<p>${E(s.pricing.scope)}</p><small>${E(s.pricing.note)}</small>` : ""}</div>`;
+}
+function homepageAssistant() {
+  return `<section class="homepage-assistant wrap" aria-labelledby="home-ai-title"><div class="home-ai-heading"><span class="home-ai-avatar">${icon("spark")}</span><div><span class="eyebrow">مساعد إنطلاقة</span><h2 id="home-ai-title">أخبرنا عن فكرتك، ولنرتّب بدايتك.</h2><p>اسأل عن الخدمات والأسعار ونطاق مشروعك.</p></div></div><div class="home-ai-entry"><label class="sr-only" for="home-ai-draft">سؤالك لمساعد إنطلاقة</label><textarea id="home-ai-draft" rows="2" maxlength="3000" placeholder="أريد متجرًا إلكترونيًا… ما الباقة المناسبة؟"></textarea><button type="button" class="btn" data-assistant-open data-assistant-draft>افتح المحادثة ${icon("arrow")}</button></div><div class="home-ai-shortcuts"><button type="button" data-assistant-open data-assistant-prompt="ما أسعار باقات المتاجر ونطاقها؟">أسعار المتاجر</button><button type="button" data-assistant-open data-assistant-prompt="كيف تبدأ رحلة عرض السعر والعقد؟">كيف نبدأ المشروع؟</button><a href="#/services">استعرض الخدمات مباشرة</a></div><p class="small muted">${state.config.assistantReady ? "الردود الذكية متاحة الآن." : "الردود الذكية بانتظار التفعيل؛ الخدمات والأسعار متاحة مباشرة."}</p></section>`;
+}
+function serviceCards({ compact = false } = {}) {
+  return (
+    (compact
+      ? state.config.services.filter((s) =>
+          ["website", "store", "apps", "identity", "ai", "marketing"].includes(
+            s.id,
+          ),
+        )
+      : state.config.services
+    )
+      .map((s, index) => {
+        const art = artwork[s.id] || artwork.website;
+        return `<article class="service-card ${compact ? "compact" : ""}" data-service-text="${E((s.title + " " + s.description).toLowerCase())}" data-service-category="${E(s.category)}"><a class="service-art" href="#/service/${E(s.id)}" tabindex="-1" aria-hidden="true"><img src="${art.image}" alt="" width="1024" height="1024" loading="lazy"><span class="art-index" dir="ltr">${String(index + 1).padStart(2, "0")} /</span><span class="art-icon">${icon(s.icon)}</span></a><div class="service-body"><span class="category">${E(s.category)}</span><h3><a href="#/service/${E(s.id)}">${E(s.title)}</a></h3><p>${E(s.description)}</p>${servicePrice(s)}<a class="service-link" href="#/service/${E(s.id)}"><span>اكتشف الحل المناسب</span>${icon("arrow")}</a></div></article>`;
+      })
+      .join("") +
+    `<article class="service-card cta-card" data-service-extra><span class="eyebrow">مساحة للأفكار الجديدة</span><div class="cta-orbit" aria-hidden="true">${icon("spark")}</div><h3>فكرتك مختلفة؟<br>لنصنع لها طريقًا.</h3><p>لا تحتاج إلى معرفة كل التفاصيل. شاركنا هدفك، ونساعدك على تحديد البداية.</p>${link("/start", "لنتحدث عن مشروعك " + icon("arrow"), "secondary")}</article>`
+  );
+}
+function processSteps() {
+  return `<div class="steps">${[
+    ["نفهم فكرتك", "نتعرّف إلى مشروعك وجمهورك وما تريد تحقيقه."],
+    ["نرسم الطريق", "نطاق واضح، وعرض سعر، واتفاق تراجعه قبل البدء."],
+    ["نبني معك", "تنفيذ ومراجعات وتحديثات في مساحة مشروعك."],
+    ["ننطلق بثقة", "نراجع التفاصيل معك، ونسلّم المخرجات المتفق عليها."],
+  ]
+    .map(
+      ([title, text], i) =>
+        `<article class="step"><span class="step-num" dir="ltr">0${i + 1}</span><h3>${title}</h3><p>${text}</p></article>`,
+    )
+    .join("")}</div>`;
+}
+function home() {
+  return `${homepageAssistant()}<div class="home-intro"><div class="wrap"><section class="hero"><div class="hero-copy"><span class="eyebrow"><span class="status-dot"></span>إنطلاقة للتجارة الإلكترونية</span><h1>نخطط، ننفذ،<br><em>وننجح معك.</em></h1><p>نحوّل فكرتك إلى تجربة رقمية متكاملة؛ متجر يعبّر عنك، موقع يترك أثرًا، وحلول تنمو مع مشروعك.</p><div class="actions">${link("/start", "لنبدأ مشروعك " + icon("arrow"))}${link("/store", "تصفّح حلولنا", "secondary")}</div><div class="hero-note"><span>${icon("check")} تصميم يعكس هويتك</span><span>${icon("check")} رحلة واضحة من البداية</span></div></div><div class="hero-composition"><div class="geometry geometry-one" aria-hidden="true"></div><div class="hero-image"><img src="/assets/catalog-store.webp" alt="تصور إبداعي لمتجر إلكتروني بألوان إنطلاقة" width="1024" height="1024" fetchpriority="high"><div class="image-topline"><span><i></i> مصمّم لطموحك</span><span dir="ltr">INTLAKAH / DIGITAL</span></div><div class="image-caption"><div><small>من الفكرة إلى التجربة</small><strong>تفاصيل تصنع الفرق.</strong></div><span class="circle-arrow">${icon("arrow")}</span></div></div><div class="floating-note"><span class="floating-icon">${icon("bag")}</span><div><small>تجارتك، بأسلوبك.</small><strong>تجربة واحدة. احتمالات أوسع.</strong></div></div><div class="floating-mini"><img src="/assets/catalog-apps.webp" alt="تصور واجهة تطبيق" width="1024" height="1024"><span>حلول مترابطة <i>↗</i></span></div></div></section></div></div><div class="expertise-strip"><div class="wrap">${[
+    ["bag", "تجارة إلكترونية"],
+    ["globe", "مواقع ومنصات"],
+    ["code", "تطبيقات وأنظمة"],
+    ["chart", "تسويق رقمي"],
+    ["spark", "محتوى إبداعي"],
+  ]
+    .map(([i, t]) => `<span>${icon(i)}${t}</span>`)
+    .join(
+      "",
+    )}</div></div><div class="wrap"><section class="section" aria-labelledby="services-title"><div class="section-head"><div><div class="eyebrow">حلول تتكامل حول مشروعك</div><h2 id="services-title">ما تحتاجه للخطوة القادمة.</h2></div><div><p>من بناء الأساس إلى صناعة الأثر.<br>اختر بداية تناسبك، ودع الباقي علينا.</p></div></div><div class="service-grid">${serviceCards({ compact: true })}</div><div class="section-more">${link("/services", "اكتشف جميع خدماتنا " + icon("arrow"), "secondary")}</div></section><section class="platform-section"><div class="platform-copy"><div class="eyebrow">تفاصيل أكثر. تشتّت أقل.</div><h2>مشروعك واضح.<br>في كل خطوة.</h2><p>مساحة خاصة تجمع الاتفاق، والطلبات، والملفات، والتحديثات. لتبقى على اطلاع، وتتفرّغ لما يهمك.</p><ul class="feature-list"><li>${icon("check")}عرض سعر وعقد تراجعهما قبل التنفيذ</li><li>${icon("check")}مراحل ومرفقات مرتبطة بمشروعك</li><li>${icon("check")}تواصل مع الفريق في مكان واحد</li></ul>${link(state.user ? "/dashboard" : "/register", "اكتشف مساحة العميل", "secondary")}</div><div class="workspace-preview" aria-label="تصور توضيحي لمساحة متابعة المشروع"><div class="preview-title"><span class="preview-brand">${icon("diamond")} مساحة مشروعك</span><span class="preview-label">تصوّر توضيحي</span></div><div class="preview-project"><span class="preview-project-icon">${icon("bag")}</span><div><small>الفصل القادم لمشروعك</small><h3>متجرك الإلكتروني</h3></div><span class="badge">رحلة متكاملة</span></div><div class="preview-progress"><span></span><span></span><span></span><span></span></div><div class="preview-milestones"><div>${icon("file")}<span>الاتفاق<small>النطاق والتفاصيل</small></span>${icon("check")}</div><div>${icon("grid")}<span>التنفيذ<small>مراحل واضحة ومراجعات</small></span>${icon("clock")}</div><div>${icon("message")}<span>التواصل<small>الملفات والملاحظات</small></span>${icon("arrow")}</div></div><div class="preview-bottom"><span class="mini-avatars"><i>إ</i><i>أنت</i></span><span>أنت وفريق إنطلاقة، في مساحة واحدة.</span></div></div></section><section class="section process-section"><div class="section-head"><div><div class="eyebrow">من أين نبدأ؟</div><h2>رحلة مدروسة، خطوة بخطوة.</h2></div><p>نعرف أن البداية تحمل الكثير من الأسئلة.<br>لهذا، نجعل الطريق واضحًا أمامك.</p></div>${processSteps()}</section><section class="assistant-callout"><div class="assistant-orb" aria-hidden="true">${icon("spark")}</div><div><div class="eyebrow">مساعد إنطلاقة الذكي</div><h2>فكرتك في بالك، ولا تعرف من أين تبدأ؟</h2><p>اكتشف الحلول، ورتّب متطلبات مشروعك، واسأل عن خطوتك القادمة.</p></div><button class="btn secondary" type="button" data-assistant-open>ابدأ المحادثة ${icon("message")}</button></section><section class="banner"><span class="banner-lines" aria-hidden="true"></span><div><div class="eyebrow">فصلك القادم يبدأ هنا</div><h2>لنصنع شيئًا يليق بطموحك.</h2><p>شاركنا فكرتك. والبداية، علينا معًا.</p></div>${link("/start", "ابدأ مع إنطلاقة " + icon("arrow"), "lime")}</section></div>`;
+}
+
+function pageHead(title, subtitle = "", action = "") {
+  return `<div class="page-head"><div><h1>${title}</h1>${subtitle ? `<p>${subtitle}</p>` : ""}</div>${action}</div>`;
+}
+function sidebar(path, admin = false) {
+  const items = admin
+    ? [
+        ["/admin", "نظرة عامة", "grid"],
+        ["/admin/orders", "الطلبات", "bag"],
+        ["/admin/products", "المنتجات الرقمية", "file"],
+        ["/admin/customers", "العملاء", "user"],
+        ["/support", "تذاكر الدعم", "message"],
+        ["/profile", "حسابي", "user"],
+      ]
+    : [
+        ["/dashboard", "نظرة عامة", "grid"],
+        ["/orders", "طلباتي", "bag"],
+        ["/contracts", "عقودي", "file"],
+        ["/invoices", "المدفوعات", "file"],
+        ["/notifications", "التحديثات", "bell"],
+        ["/support", "الدعم والمساعدة", "message"],
+        ["/profile", "إعدادات الحساب", "user"],
+      ];
+  return `<aside class="sidebar" aria-label="قائمة الحساب"><div class="sidebar-label">${admin ? "إدارة المنصة" : "مساحتك في انطلاقة"}</div>${items.map(([p, l, i]) => `<a href="#${p}" class="${path === p ? "active" : ""}" ${path === p ? 'aria-current="page"' : ""}>${icon(i)}${l}</a>`).join("")}<div class="divider"></div><button data-action="logout">${icon("logout")}تسجيل الخروج</button></aside>`;
+}
+function workspace(path, content) {
+  return `<div class="wrap workspace">${sidebar(path, state.user.role === "admin")}<div class="workspace-content">${content}</div></div>`;
+}
+function authPage(register, query) {
+  const emailLogin = query.get("method") === "email" || (query.get("next") || "").startsWith("/admin");
+  const next = query.get("next") || "/dashboard";
+  return `<div class="wrap"><div class="auth-layout"><div class="auth-story"><div class="eyebrow">مساحتك في انطلاقة</div><h2>كل ما يخص مشروعك،<br>أقرب إليك.</h2><p>حساب واحد يجمع طلباتك وعقودك وملفاتك وتواصلك مع الفريق.</p><div class="auth-points"><div class="auth-point">${icon("bag")} متابعة الطلبات والمشاريع</div><div class="auth-point">${icon("file")} عروض أسعار وعقود واضحة</div><div class="auth-point">${icon("message")} تواصل وملاحظات في مكان واحد</div></div></div><div class="auth-form"><h1>${register ? "أنشئ حسابك" : "أهلًا بعودتك"}</h1><p class="muted">${register ? "خطوتك الأولى نحو مشروعك القادم." : "سجّل الدخول لمتابعة مشروعك."}</p><form data-form="${register ? "register" : "login"}" data-next="${E(next)}">${errors()}${register ? field("name", "الاسم الكامل", "text", 'required minlength="2" maxlength="100" autocomplete="name"') : ""}${register || !emailLogin ? field("phone", "رقم الجوال", "tel", 'required autocomplete="tel" inputmode="tel" placeholder="05XXXXXXXX" maxlength="30"') : ""}${register || emailLogin ? field("email", register ? "البريد الإلكتروني للمراسلات" : "بريد حساب الإدارة أو الحساب القديم", "email", 'required autocomplete="email" maxlength="180"') : ""}${field("password", "كلمة المرور", "password", `required ${register ? 'minlength="12"' : ""} maxlength="128" autocomplete="${register ? "new-password" : "current-password"}"`)}${register ? `<p class="small muted">12 حرفًا على الأقل؛ يُفضّل استخدام عبارة طويلة يسهل عليك تذكرها.</p><label class="check"><input type="checkbox" name="acceptTerms" required><span>قرأت <a href="#/terms" target="_blank" rel="noopener">الشروط والأحكام</a> و<a href="#/privacy" target="_blank" rel="noopener">سياسة الخصوصية</a> وأوافق عليهما.</span></label>` : ""}<button class="btn" type="submit">${register ? "إنشاء الحساب" : "تسجيل الدخول"}</button></form>${!register && !emailLogin ? `<details class="spaced"><summary>حساب قديم أو حساب إدارة؟</summary><p>ادخل بالبريد مرة واحدة، ثم اربط رقم الدخول من إعدادات الحساب.</p><a class="text-link" href="#/login?method=email&next=${encodeURIComponent(next)}">الدخول للحساب القديم أو الإدارة</a></details>` : ""}<p class="auth-switch">${register ? "لديك حساب؟" : "جديد على انطلاقة؟"} <a href="#/${register ? "login" : "register"}?next=${encodeURIComponent(next)}">${register ? "سجّل الدخول" : "أنشئ حسابًا"}</a></p></div></div></div>`;
+}
+function authRequired(next) {
+  return `<div class="wrap">${pageHead("لنبدأ من حسابك", "احفظ تفاصيل مشروعك وتابع الردود والتحديثات.")}<div class="checkout">${empty("مساحتك الخاصة بالمشروع", "سجّل الدخول أو أنشئ حسابًا لتقديم الطلب ومتابعته بأمان.", `<div class="actions">${link("/login?next=" + encodeURIComponent(next), "تسجيل الدخول")}${link("/register?next=" + encodeURIComponent(next), "إنشاء حساب", "secondary")}</div>`)}</div></div>`;
+}
+function start(query) {
+  const selected = query.get("service") || "";
+  return `<div class="wrap">${pageHead("ابدأ مشروعك الإلكتروني", "كل مشروع ناجح يبدأ بفهم الفكرة. أخبرنا بما تخطط له.")}<div class="two-col"><section class="panel"><form data-form="start">${errors()}<div class="field"><label for="service">ما الخدمة التي تحتاجها؟</label><select id="service" name="service" required><option value="">اختر الخدمة</option>${state.config.services.map((s) => `<option value="${s.id}" ${s.id === selected ? "selected" : ""}>${s.title}</option>`).join("")}</select></div>${field("title", "اسم المشروع أو عنوان الطلب", "text", 'required minlength="3" maxlength="160" placeholder="مثل: متجر لمنتجات العناية"')}${textarea("description", "حدّثنا عن فكرتك", 'required minlength="15" maxlength="8000" placeholder="ما الذي تريد بناءه؟ من سيستخدمه؟ وما أهم ما تتوقعه؟"')}<div class="form-grid">${field("budget", "الميزانية المتوقعة (اختياري)", "text", 'maxlength="100" placeholder="مثل: من 5,000 إلى 10,000 ر.س"')}${field("targetDate", "موعد الإطلاق المستهدف (اختياري)", "date")}</div><button class="btn" type="submit">إرسال طلب المشروع</button></form></section><aside><section class="panel"><div class="service-icon">${icon("spark")}</div><h2>ماذا يحدث بعد الإرسال؟</h2><ol class="feature-list"><li><strong>01</strong> نراجع الفكرة والتفاصيل.</li><li><strong>02</strong> نتواصل معك لاستكمال المتطلبات.</li><li><strong>03</strong> يصلك عرض سعر وعقد للمراجعة.</li><li><strong>04</strong> نبدأ التنفيذ بعد الاتفاق وتأكيد الدفع.</li></ol></section><div class="notice">إرسال الطلب لا يلزمك بالدفع. ستراجع نطاق العمل والسعر قبل الموافقة.</div></aside></div></div>`;
 }
 function ordersTable(orders, admin = false) {
   if (!orders.length)
