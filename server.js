@@ -7,6 +7,8 @@ import { resolve, join, extname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createStore } from "./lib/store.js";
 import { getLaunchOffer, claimPromotion, priceBreakdown } from "./lib/promotion.js";
+import { contractMetadata, validateContractDetails, createContractDocument } from "./lib/contracts.js";
+import { createRecovery } from "./lib/recovery.js";
 import {
   id,
   digest,
@@ -62,6 +64,9 @@ if (
   throw Error("DATA_DIR must be outside the deployed checkout.");
 await mkdir(join(dataDir, "files"), { recursive: true });
 const db = await createStore({ driver, dir: dataDir });
+const recovery = await createRecovery({ db });
+let businessWhatsapp = "966553575760";
+try { businessWhatsapp = normalizePhone(process.env.BUSINESS_WHATSAPP_PHONE || "+966553575760").slice(1); } catch {}
 const now = () => new Date().toISOString();
 const assistant = createAssistant({
   getCatalog: async () => ({
@@ -140,7 +145,7 @@ async function session(req) {
   const s = await db.get("session", digest(match[1]));
   if (!s || s.expires < Date.now()) return null;
   const u = await db.get("user", s.userId);
-  if (!u || u.disabled || s.passwordVersion !== (u.passwordVersion || 0))
+  if (!u || u.disabled || s.passwordVersion !== (u.passwordVersion || 0) || (s.authVersion || 0) !== (u.authVersion || 0))
     return null;
   return { s, u };
 }
@@ -152,6 +157,7 @@ async function login(res, u) {
     csrf: id(),
     expires: Date.now() + 7 * 86400_000,
     passwordVersion: u.passwordVersion || 0,
+    authVersion: u.authVersion || 0,
   };
   await db.insert("session", s, u.id);
   cookie(res, token);
@@ -288,7 +294,8 @@ function isDuplicate(error) {
 }
 function currentAccount(u, auth) {
   if (u.disabled || u.password !== auth.u.password ||
-      (u.passwordVersion || 0) !== (auth.u.passwordVersion || 0))
+      (u.passwordVersion || 0) !== (auth.u.passwordVersion || 0) ||
+      (u.authVersion || 0) !== (auth.u.authVersion || 0))
     throw fail(409, "تغيّرت بيانات الحساب. أعد تسجيل الدخول ثم حاول مجددًا.");
 }
 async function phoneClaim(number, userId) {
@@ -301,16 +308,6 @@ async function phoneClaim(number, userId) {
     return null;
   }
   return { kind: "loginPhone", item: { id: key, userId }, owner: userId };
-}
-async function claimLoginPhone(number, userId) {
-  const claim = await phoneClaim(number, userId);
-  if (!claim) return false;
-  try { await db.insert(claim.kind, claim.item, claim.owner); }
-  catch (error) {
-    if (isDuplicate(error)) throw fail(409, "رقم الجوال مرتبط بحساب آخر.");
-    throw error;
-  }
-  return true;
 }
 async function api(req, res, url) {
   const path = url.pathname,
@@ -328,6 +325,9 @@ async function api(req, res, url) {
     "/api/auth/login",
     "/api/auth/otp/send",
     "/api/auth/otp/check",
+    "/api/auth/recovery/request",
+    "/api/auth/recovery/verify",
+    "/api/auth/recovery/reset",
   ];
   if (!["GET", "HEAD"].includes(method) && !publicWrite.includes(path)) {
     authorize(auth);
@@ -355,6 +355,9 @@ async function api(req, res, url) {
       customerJourney,
       launchOffer: getLaunchOffer(),
       integrations: { ga4MeasurementId },
+      contracts: contractMetadata,
+      recovery: recovery.readiness,
+      channels: { whatsapp: { phone: businessWhatsapp, direct: true, automated: false } },
       smsReady,
       assistantReady: assistant.ready,
       businessEmail: process.env.BUSINESS_EMAIL || "antlaqh2030@gmail.com",
@@ -375,6 +378,19 @@ async function api(req, res, url) {
       200,
       auth ? { user: publicUser(auth.u), csrf: auth.s.csrf } : { user: null },
     );
+  if (method === "POST" && path === "/api/auth/recovery/request") {
+    rate(`recovery-request:${ip}`, 12);
+    return json(res, 200, await recovery.request(await jsonBody(req)));
+  }
+  if (method === "POST" && path === "/api/auth/recovery/verify") {
+    rate(`recovery-verify:${ip}`, 30);
+    return json(res, 200, await recovery.verify(await jsonBody(req)));
+  }
+  if (method === "POST" && path === "/api/auth/recovery/reset") {
+    rate(`recovery-reset:${ip}`, 12);
+    const result = await recovery.reset(await jsonBody(req));
+    return json(res, 200, result);
+  }
   if (method === "POST" && path === "/api/auth/register") {
     rate(`register:${ip}`, 8);
     const b = await jsonBody(req);
@@ -468,6 +484,7 @@ async function api(req, res, url) {
       currentAccount(u, auth);
       u.password = hash;
       u.passwordVersion = (u.passwordVersion || 0) + 1;
+      u.authVersion = (u.authVersion || 0) + 1;
       return u;
     });
     return json(res, 200, await login(res, updated));
@@ -564,33 +581,34 @@ async function api(req, res, url) {
       Code: text(b.code, 4, 10),
     });
     if (result.status !== "approved") throw fail(400, "رمز التحقق غير صحيح.");
-    await db.update("phone", cid, (x) => {
-      if (x.used || x.expires < Date.now()) throw fail(400, "الرمز غير صالح أو منتهي.");
-      x.used = true;
-      return x;
-    });
     const phoneKey = digest(c.phone);
-    await claimLoginPhone(c.phone, auth.u.id);
-    let registration = await db.get("verifiedPhone", phoneKey);
-    if (!registration) {
-      try {
-        registration = await db.insert(
-          "verifiedPhone",
-          { id: phoneKey, userId: auth.u.id },
-          auth.u.id,
-        );
-      } catch (e) {
-        registration = await db.get("verifiedPhone", phoneKey);
-        if (!registration) throw e;
-      }
-    }
-    if (registration.userId !== auth.u.id)
+    const claim = await phoneClaim(c.phone, auth.u.id);
+    const registration = await db.get("verifiedPhone", phoneKey);
+    if (registration && registration.userId !== auth.u.id)
       throw fail(409, "الرقم موثّق في حساب آخر. تواصل مع الدعم.");
-    const u = await db.update("user", auth.u.id, (u) => {
-      u.phone = c.phone;
-      u.phoneVerified = true;
-      return u;
-    });
+    const inserts = [
+      ...(claim ? [claim] : []),
+      ...(!registration ? [{ kind: "verifiedPhone", item: { id: phoneKey, userId: auth.u.id }, owner: auth.u.id }] : []),
+    ];
+    let u;
+    try {
+      [, u] = await db.updateMany([
+        { kind: "phone", id: cid, fn: (x) => {
+          if (x.used || x.expires < Date.now()) throw fail(400, "الرمز غير صالح أو منتهي.");
+          x.used = true;
+          return x;
+        } },
+        { kind: "user", id: auth.u.id, fn: (user) => {
+          currentAccount(user, auth);
+          user.phone = c.phone;
+          user.phoneVerified = true;
+          return user;
+        } },
+      ], inserts);
+    } catch (error) {
+      if (isDuplicate(error)) throw fail(409, "تغيّر ارتباط رقم الجوال. أعد طلب رمز جديد.");
+      throw error;
+    }
     return json(res, 200, { user: publicUser(u) });
   }
   if (method === "GET" && path === "/api/products")
@@ -744,6 +762,12 @@ async function api(req, res, url) {
       const b = await jsonBody(req);
       if (o.type !== "service")
         throw fail(400, "عرض السعر خاص بطلبات الخدمات.");
+      const details = validateContractDetails(b.contractDetails);
+      const providerDetails = {
+        ...details.provider,
+        email: process.env.BUSINESS_EMAIL || "antlaqh2030@gmail.com",
+        phone: process.env.BUSINESS_PHONE || "+966553575760",
+      };
       const q = {
         id: id(),
         version: o.contracts.length + 1,
@@ -752,9 +776,10 @@ async function api(req, res, url) {
         deliveryDate: text(b.deliveryDate, 10, 10),
         terms: text(b.terms, 10, 10000),
         parties: {
-          provider: "إنطلاقة للتجارة الإلكترونية",
+          provider: details.provider.legalName,
           customer: { ...o.customer },
         },
+        providerDetails,
         currency: "SAR",
         createdAt: now(),
         acceptedAt: null,
@@ -774,12 +799,19 @@ async function api(req, res, url) {
           throw fail(409, "لا يمكن تعديل عرض مدفوع.");
         Object.assign(q, priceBreakdown(q.subtotal, x.promotion));
         q.promotion = x.promotion || null;
+        q.document = createContractDocument(details, {
+          ...q,
+          contact: providerDetails,
+          customer: x.customer,
+          siteOptions: x.siteOptions,
+        });
         q.version = x.contracts.length + 1;
         q.fingerprint = digest(JSON.stringify({
           id: q.id, version: q.version, agreement: q.agreement,
           subtotal: q.subtotal, discount: q.discount, amount: q.amount,
           promotion: q.promotion, deliveryDate: q.deliveryDate, terms: q.terms,
-          parties: q.parties, currency: q.currency,
+          parties: q.parties, providerDetails: q.providerDetails,
+          document: q.document, currency: q.currency,
         }));
         x.contracts.push(q);
         x.currentContract = q.id;
@@ -888,6 +920,15 @@ async function api(req, res, url) {
   }
   if (path.startsWith("/api/admin/")) {
     authorize(auth, true);
+    if (method === "GET" && path === "/api/admin/contract-provider")
+      return json(res, 200, {
+        legalName: process.env.BUSINESS_LEGAL_NAME || "",
+        address: process.env.BUSINESS_ADDRESS || "",
+        registrationNumber: process.env.BUSINESS_REGISTRATION_NUMBER || "",
+        registrationType: ["none", "commercial_registration", "freelance_certificate"].includes(process.env.BUSINESS_REGISTRATION_TYPE)
+          ? process.env.BUSINESS_REGISTRATION_TYPE : "none",
+        activity: process.env.BUSINESS_ACTIVITY || "",
+      });
     if (method === "GET" && path === "/api/admin/summary") {
       const orders = await db.list("order"),
         users = await db.list("user"),

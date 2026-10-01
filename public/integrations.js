@@ -2,6 +2,7 @@
 let measurementId = null, started = false, consent = null, lastPage = null;
 const publicRoute = () => {
   const route = (location.hash.slice(1) || "/").split("?")[0];
+  if (/^\/(?:forgot-password|verify|reset-password)(?:\/|$)/.test(route)) return null;
   return /^\/(?:services|store|ready-websites|about|launch-offer)?$/.test(route) || /^\/service\/[a-z-]+$/.test(route) ? route : null;
 };
 try { consent = localStorage.getItem("antlaqh-analytics-consent"); } catch {}

@@ -9,6 +9,12 @@ const state = {
   loginChallenge: null,
   ready: false,
   loading: null,
+  recoveryChallenge: null,
+  recoveryChannel: null,
+  recoveryMessage: "",
+  resetToken: "",
+  resetExpiresAt: 0,
+  recoveryOperation: 0,
 };
 const escape = (value) =>
   String(value ?? "").replace(
@@ -92,6 +98,41 @@ const textarea = (name, label, opts = "") => {
   return `<div class="field"><label for="${inputId}">${label}</label><textarea id="${inputId}" name="${name}" ${opts}></textarea></div>`;
 };
 const errors = () => '<div class="error" role="alert"></div>';
+function whatsappLink(label = "راسل انطلاقة على WhatsApp", className = "btn secondary") {
+  const phone = state.config?.channels?.whatsapp?.phone || "966553575760";
+  if (!/^\d{8,15}$/.test(phone)) return "";
+  const greeting = encodeURIComponent("مرحبًا انطلاقة، أود الاستفسار عن خدماتكم ومتابعة مشروعي.");
+  return `<a class="${E(className)}" href="https://wa.me/${phone}?text=${greeting}" target="_blank" rel="noopener noreferrer">${icon("message")}${E(label)}</a>`;
+}
+function contractField(name, label, value = "", attributes = "", multiline = false) {
+  const inputId = `contract-${name}-${++fieldCounter}`;
+  return `<div class="field"><label for="${inputId}">${E(label)}</label>${multiline
+    ? `<textarea id="${inputId}" name="${name}" ${attributes}>${E(value)}</textarea>`
+    : `<input id="${inputId}" name="${name}" value="${E(value)}" ${attributes}>`}</div>`;
+}
+function quoteForm(o, q) {
+  const d = q?.document?.details || {}, p = d.provider || o.contractProvider || {};
+  const textField = (name,label,value="",min=10,max=3000) => contractField(name,label,value,`required minlength="${min}" maxlength="${max}"`,true);
+  return `<section class="panel"><h2>${q ? "إصدار عقد جديد" : "إعداد عرض السعر والعقد"}</h2><p class="muted">راجع كل بند؛ ما ترسله هنا يحفظ في نسخة مستقلة يوافق عليها العميل صراحة.</p><form data-form="quote" data-id="${E(o.id)}">${errors()}
+    <fieldset class="site-options"><legend>هوية مقدم الخدمة</legend>
+      ${contractField("providerLegalName","اسم مقدم الخدمة القانوني",p.legalName || "",'required minlength="2" maxlength="150" autocomplete="organization"')}
+      ${textField("providerAddress","عنوان مقدم الخدمة",p.address || "",10,500)}
+      <div class="field"><label for="provider-registration-type">نوع وثيقة النشاط</label><select id="provider-registration-type" name="providerRegistrationType">${[["none","لا توجد وثيقة مضافة"],["commercial_registration","سجل تجاري"],["freelance_certificate","شهادة عمل حر"]].map(([id,label])=>`<option value="${id}" ${id===(p.registrationType||"none")?"selected":""}>${label}</option>`).join("")}</select></div>
+      ${contractField("providerRegistrationNumber","رقم السجل أو شهادة العمل الحر (إن وجدت)",p.registrationNumber || "",'maxlength="80"')}
+      ${contractField("providerActivity","وصف النشاط",p.activity || "",'maxlength="200"')}
+    </fieldset>
+    ${textField("agreement","الاتفاق ونطاق المشروع",q?.agreement || o.description || "",10,10000)}
+    ${textField("deliverables","المخرجات التي سيتسلمها العميل",d.deliverables || "",15,5000)}
+    ${textField("exclusions","ما لا يشمله هذا العقد",d.exclusions || "")}
+    ${textField("clientRequirements","المحتوى والصلاحيات والمتطلبات التي يوفرها العميل",d.clientRequirements || "")}
+    <div class="form-grid">${contractField("revisions","عدد جولات التعديل",d.revisions ?? 1,'type="number" required min="0" max="20" step="1"')}${contractField("reviewDays","مهلة تقديم ملاحظات التسليم (أيام)",d.reviewDays ?? 7,'type="number" required min="1" max="30" step="1"')}${contractField("supportDays","دعم تصحيح عيوب مطابقة النطاق (أيام)",d.supportDays ?? 30,'type="number" required min="0" max="365" step="1"')}</div>
+    ${textField("thirdPartyCosts","رسوم الاستضافة والدومين والجهات الخارجية وتجديدها",d.thirdPartyCosts || "")}
+    ${textField("ownership","حقوق الملفات والتراخيص والملكية بعد السداد",d.ownership || "")}
+    ${textField("cancellation","آلية الإلغاء والاسترداد والأعمال المنفذة",d.cancellation || "")}
+    <div class="form-grid">${contractField("amount","الإجمالي شامل الرسوم والضرائب الواجبة قبل خصم الإطلاق (ر.س)",q?.subtotal ? q.subtotal/100 : "",'type="number" required min="1" max="1000000" step="0.01"')}${contractField("deliveryDate","تاريخ التسليم المتفق عليه",q?.deliveryDate || "",'type="date" required')}</div>
+    ${textField("terms","شروط خاصة إضافية لهذا الإصدار",q?.terms || "تسري بنود هذا الإصدار مع تفاصيله المكتوبة، دون انتقاص الحقوق النظامية للطرفين.",10,10000)}
+    <div class="notice">بيّن المخرجات وحدودها ورسوم الإضافات وتجديدها بدقة. لا تضف بيانات منشأة أو ضمانات غير مؤكدة. يحسب الخادم خصم الطلب، ويحفظ البنود والسعر والهوية والموافقة بإصدار مستقل. أي تغيير يحتاج موافقة جديدة؛ لا تُعد مهلة المراجعة موافقة تلقائية.</div><button class="btn" type="submit">إرسال العرض والعقد للعميل</button></form></section>`;
+}
 const empty = (title, message, action = "") =>
   `<div class="empty"><div class="service-icon">${icon("file")}</div><h2>${title}</h2><p>${message}</p>${action}</div>`;
 const formData = (form) => Object.fromEntries(new FormData(form));
@@ -104,6 +145,14 @@ function clearSession() {
   state.csrf = "";
   state.challenge = null;
   state.loginChallenge = null;
+}
+function clearRecovery() {
+  state.recoveryOperation++;
+  state.recoveryChallenge = null;
+  state.recoveryChannel = null;
+  state.recoveryMessage = "";
+  state.resetToken = "";
+  state.resetExpiresAt = 0;
 }
 function notify(message) {
   const el = $("#toast");
@@ -146,7 +195,7 @@ async function api(path, options = {}) {
       requestUser &&
       state.user === requestUser &&
       state.csrf === requestCsrf &&
-      !/^\/api\/auth\/(?:login|register|otp\/(?:send|check))$/.test(path)
+      !/^\/api\/auth\/(?:login|register|otp\/(?:send|check)|recovery\/(?:request|verify|reset))$/.test(path)
     ) {
       clearSession();
       error.sessionExpired = true;
@@ -293,7 +342,7 @@ function header(path) {
         "",
       )}</nav><div class="header-actions">${authed ? `<a class="user-chip" href="#${admin ? "/admin" : "/dashboard"}"><span class="avatar">${E(state.user.name.slice(0, 1))}</span><span class="user-name">${E(state.user.name.split(" ")[0])}</span></a>` : link("/login", "حسابي", "ghost login-link")}${link("/start", "ابدأ مشروعك " + icon("arrow"), "header-start")}<button class="btn ghost menu-button" data-action="menu" aria-label="فتح القائمة" aria-expanded="false" aria-controls="main-nav">${icon("menu")}</button></div></div>`;
   $("#footer").innerHTML =
-    `<div class="wrap footer-top"><div class="footer-brand">${logo(true)}<p>نصنع لمشروعك بداية مدروسة، وحضورًا رقميًا يعبّر عنه. من أول فكرة إلى تجربة تستحق أن تُشارك.</p><span class="footer-signature" dir="ltr">THOUGHTFULLY BUILT. READY TO GROW.</span></div><div class="footer-column"><h3>اكتشف إنطلاقة</h3><nav aria-label="اكتشف إنطلاقة"><a href="#/services">حلولنا الرقمية</a><a href="#/store">المتجر الرقمي</a><a href="#/ready-websites">المواقع الجاهزة</a><a href="#/launch-offer">عرض الإطلاق</a><a href="#/about">قصتنا وطريقتنا</a><a href="#/start">ابدأ مشروعًا</a></nav></div><div class="footer-column"><h3>نحن بالقرب منك</h3><div class="footer-contact"><a href="tel:${E(businessPhone)}" dir="ltr">${E(phoneLabel)}</a><a href="mailto:${E(businessEmail)}" dir="ltr">${E(businessEmail)}</a></div><nav aria-label="المساعدة"><a href="#/dashboard">مساحة العميل</a><a href="#/support">الدعم والمساعدة</a><button type="button" data-assistant-open>تحدث مع المساعد الذكي ${icon("spark")}</button><a href="#/privacy">سياسة الخصوصية</a>${state.config?.integrations?.ga4MeasurementId ? `<button type="button" data-analytics-settings>خيارات قياس الزيارات</button>` : ""}</nav></div></div>${paymentIcons()}<div class="wrap">${shareLinks()}</div><div class="wrap footer-bottom"><span>© ${new Date().getFullYear()} إنطلاقة للتجارة الإلكترونية. جميع الحقوق محفوظة.</span><a href="#/terms">الشروط والأحكام</a><span class="footer-dot">بدايات مدروسة. أثر مستمر.</span></div><a class="floating-contact" href="tel:${E(businessPhone)}" aria-label="اتصل بإنطلاقة على ${E(phoneLabel)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 3h4l2 5-3 2c2 3 3 4 6 6l2-3 5 2v4c0 1-1 2-2 2C10 21 3 14 3 5c0-1 1-2 2-2Z"/></svg><span>تواصل معنا</span></a>`;
+    `<div class="wrap footer-top"><div class="footer-brand">${logo(true)}<p>نصنع لمشروعك بداية مدروسة، وحضورًا رقميًا يعبّر عنه. من أول فكرة إلى تجربة تستحق أن تُشارك.</p><span class="footer-signature" dir="ltr">THOUGHTFULLY BUILT. READY TO GROW.</span></div><div class="footer-column"><h3>اكتشف إنطلاقة</h3><nav aria-label="اكتشف إنطلاقة"><a href="#/services">حلولنا الرقمية</a><a href="#/store">المتجر الرقمي</a><a href="#/ready-websites">المواقع الجاهزة</a><a href="#/launch-offer">عرض الإطلاق</a><a href="#/about">قصتنا وطريقتنا</a><a href="#/start">ابدأ مشروعًا</a></nav></div><div class="footer-column"><h3>نحن بالقرب منك</h3><div class="footer-contact"><a href="tel:${E(businessPhone)}" dir="ltr">${E(phoneLabel)}</a><a href="mailto:${E(businessEmail)}" dir="ltr">${E(businessEmail)}</a>${whatsappLink("WhatsApp مع فريق انطلاقة","text-link")}</div><nav aria-label="المساعدة"><a href="#/dashboard">مساحة العميل</a><a href="#/support">الدعم والمساعدة</a><button type="button" data-assistant-open>تحدث مع المساعد الذكي ${icon("spark")}</button><a href="#/privacy">سياسة الخصوصية</a>${state.config?.integrations?.ga4MeasurementId ? `<button type="button" data-analytics-settings>خيارات قياس الزيارات</button>` : ""}</nav></div></div>${paymentIcons()}<div class="wrap">${shareLinks()}</div><div class="wrap footer-bottom"><span>© ${new Date().getFullYear()} إنطلاقة للتجارة الإلكترونية. جميع الحقوق محفوظة.</span><a href="#/terms">الشروط والأحكام</a><span class="footer-dot">بدايات مدروسة. أثر مستمر.</span></div><a class="floating-contact" href="https://wa.me/966553575760?text=${encodeURIComponent("مرحبًا انطلاقة، أود الاستفسار عن خدماتكم.")}" target="_blank" rel="noopener noreferrer" aria-label="راسل انطلاقة عبر WhatsApp على ${E(phoneLabel)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 3h4l2 5-3 2c2 3 3 4 6 6l2-3 5 2v4c0 1-1 2-2 2C10 21 3 14 3 5c0-1 1-2 2-2Z"/></svg><span>راسلنا على WhatsApp</span></a>`;
 }
 
 function activeOffer() {
@@ -437,6 +486,29 @@ function authPage(register, query) {
   const next = query.get("next") || "/dashboard";
   return `<div class="wrap"><div class="auth-layout"><div class="auth-story"><div class="eyebrow">مساحتك في انطلاقة</div><h2>كل ما يخص مشروعك،<br>أقرب إليك.</h2><p>حساب واحد يجمع طلباتك وعقودك وملفاتك وتواصلك مع الفريق.</p><div class="auth-points"><div class="auth-point">${icon("bag")} متابعة الطلبات والمشاريع</div><div class="auth-point">${icon("file")} عروض أسعار وعقود واضحة</div><div class="auth-point">${icon("message")} تواصل وملاحظات في مكان واحد</div></div></div><div class="auth-form"><h1>${register ? "أنشئ حسابك" : "أهلًا بعودتك"}</h1><p class="muted">${register ? "خطوتك الأولى نحو مشروعك القادم." : "سجّل الدخول لمتابعة مشروعك."}</p><form data-form="${register ? "register" : "login"}" data-next="${E(next)}">${errors()}${register ? field("name", "الاسم الكامل", "text", 'required minlength="2" maxlength="100" autocomplete="name"') : ""}${register || !emailLogin ? field("phone", "رقم الجوال", "tel", 'required autocomplete="tel" inputmode="tel" placeholder="05XXXXXXXX" maxlength="30"') : ""}${register || emailLogin ? field("email", register ? "البريد الإلكتروني للمراسلات" : "بريد حساب الإدارة أو الحساب القديم", "email", 'required autocomplete="email" maxlength="180"') : ""}${field("password", "كلمة المرور", "password", `required ${register ? 'minlength="12"' : ""} maxlength="128" autocomplete="${register ? "new-password" : "current-password"}"`)}${register ? `<p class="small muted">12 حرفًا على الأقل؛ يُفضّل استخدام عبارة طويلة يسهل عليك تذكرها.</p><label class="check"><input type="checkbox" name="acceptTerms" required><span>قرأت <a href="#/terms" target="_blank" rel="noopener">الشروط والأحكام</a> و<a href="#/privacy" target="_blank" rel="noopener">سياسة الخصوصية</a> وأوافق عليهما.</span></label>` : ""}<button class="btn" type="submit">${register ? "إنشاء الحساب" : "تسجيل الدخول"}</button></form>${!register && !emailLogin ? `<details class="spaced"><summary>حساب قديم أو حساب إدارة؟</summary><p>ادخل بالبريد مرة واحدة، ثم اربط رقم الدخول من إعدادات الحساب.</p><a class="text-link" href="#/login?method=email&next=${encodeURIComponent(next)}">الدخول للحساب القديم أو الإدارة</a></details>` : ""}<p class="auth-switch">${register ? "لديك حساب؟" : "جديد على انطلاقة؟"} <a href="#/${register ? "login" : "register"}?next=${encodeURIComponent(next)}">${register ? "سجّل الدخول" : "أنشئ حسابًا"}</a></p></div></div></div>`;
 }
+function recoveryLayout(title, description, content) {
+  return `<div class="wrap"><div class="checkout">${pageHead(title, description)}${content}<p class="small spaced"><a class="text-link" href="#/login">العودة إلى تسجيل الدخول</a></p></div></div>`;
+}
+function forgotPassword() {
+  const ready = state.config?.recovery || {};
+  const channelCard = (channel, title, available, label, type, attributes) =>
+    `<section class="panel"><h2>${title}</h2><p class="small ${available ? "" : "muted"}">${available ? "متاحة الآن للحسابات المرتبطة بهذه القناة." : "غير مفعّلة حاليًا؛ لا يمكن إرسال رسالة استعادة عبر هذه القناة."}</p><form data-form="recovery-request" data-channel="${channel}">${errors()}${field("identifier", label, type, `${attributes} ${available ? "" : "disabled"}`)}<button class="btn ${channel === "whatsapp" ? "secondary" : ""}" type="submit" ${available ? "" : "disabled"}>${channel === "email" ? "طلب رابط الاستعادة" : "طلب رمز على WhatsApp"}</button></form></section>`;
+  return recoveryLayout("نسيت كلمة المرور؟", "اختر البريد أو رقم WhatsApp المرتبط بحسابك. نستخدم ردًا عامًا لحماية خصوصية الحسابات.", `${state.recoveryMessage ? `<div class="notice" role="status">${E(state.recoveryMessage)}</div>` : ""}<div class="two-col">${channelCard("email", "البريد الإلكتروني", ready.emailReady === true, "البريد المرتبط بالحساب", "email", 'required maxlength="180" autocomplete="email"')}${channelCard("whatsapp", "WhatsApp", ready.whatsappReady === true, "رقم WhatsApp المرتبط بالحساب", "tel", 'required minlength="9" maxlength="30" inputmode="tel" autocomplete="tel" placeholder="05XXXXXXXX أو +9665XXXXXXXX"')}</div><p class="small muted">هذه الاستعادة آلية عند تفعيل مزود الإرسال. زر التواصل مع فريق انطلاقة لا يرسل رمز استعادة ولا يكشف بيانات حسابك.</p>`);
+}
+function verifyRecovery() {
+  if (!state.recoveryChallenge || state.recoveryChannel !== "whatsapp")
+    return recoveryLayout("تأكيد رمز الاستعادة", "ابدأ بطلب رمز جديد على WhatsApp.", `<section class="panel">${empty("لا يوجد طلب استعادة في هذه الصفحة", "قد تكون الصفحة أُعيد تحميلها. اطلب رمزًا جديدًا لمتابعة الاستعادة.", link("/forgot-password", "طلب استعادة جديد"))}</section>`);
+  return recoveryLayout("تأكيد رمز الاستعادة", "أدخل الرمز من رسالة WhatsApp. لا تشاركه مع أي شخص.", `<section class="panel">${state.recoveryMessage ? `<div class="notice" role="status">${E(state.recoveryMessage)}</div>` : ""}<form data-form="recovery-verify">${errors()}${field("code", "رمز الاستعادة", "text", 'required inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{4,10}" minlength="4" maxlength="10" dir="ltr"')}<p class="hint">من 4 إلى 10 أرقام، مع الاحتفاظ بالأصفار في بداية الرمز.</p><button class="btn" type="submit">تأكيد الرمز</button></form><p class="small spaced"><a class="text-link" href="#/forgot-password">طلب رمز جديد أو اختيار البريد</a></p></section>`);
+}
+function resetPassword() {
+  const expired = state.resetExpiresAt && Date.now() >= state.resetExpiresAt;
+  if (!state.resetToken || expired) {
+    state.resetToken = "";
+    state.resetExpiresAt = 0;
+    return recoveryLayout("تعيين كلمة مرور جديدة", "رابط الاستعادة مؤقت ويستخدم مرة واحدة.", `<section class="panel">${empty("الرابط غير متاح أو انتهت صلاحيته", "افتح رابط البريد الأصلي، أو اطلب استعادة جديدة. إعادة تحميل هذه الصفحة بعد إزالة الرابط تتطلب طلبًا جديدًا.", link("/forgot-password", "طلب استعادة جديد"))}</section>`);
+  }
+  return recoveryLayout("تعيين كلمة مرور جديدة", "اختر كلمة مرور بين 12 و128 حرفًا. سيُطلب منك تسجيل الدخول بعد تغييرها.", `<section class="panel"><form data-form="recovery-reset">${errors()}${field("password", "كلمة المرور الجديدة", "password", 'required minlength="12" maxlength="128" autocomplete="new-password"')}${field("passwordConfirm", "أعد كتابة كلمة المرور الجديدة", "password", 'required minlength="12" maxlength="128" autocomplete="new-password"')}<p class="small muted">يُستخدم رابط الاستعادة مرة واحدة، ويتحقق الخادم من صلاحيته. تغيير كلمة المرور ينهي جلسات الحساب المفتوحة.</p><button class="btn" type="submit">حفظ كلمة المرور الجديدة</button></form></section>`);
+}
 function authRequired(next) {
   return `<div class="wrap">${pageHead("لنبدأ من حسابك", "احفظ تفاصيل مشروعك وتابع الردود والتحديثات.")}<div class="checkout">${empty("مساحتك الخاصة بالمشروع", "سجّل الدخول أو أنشئ حسابًا لتقديم الطلب ومتابعته بأمان.", `<div class="actions">${link("/login?next=" + encodeURIComponent(next), "تسجيل الدخول")}${link("/register?next=" + encodeURIComponent(next), "إنشاء حساب", "secondary")}</div>`)}</div></div>`;
 }
@@ -515,7 +587,16 @@ function progress(o) {
   return `<div class="progress-steps">${keys.map((k, i) => `<div class="progress-step ${i <= idx ? "done" : ""}">${labels[i]}</div>`).join("")}</div>`;
 }
 function contractCard(q, o, history = false) {
-  return `<div class="quote"><div class="quote-head"><div><h3>الاتفاق والعقد · الإصدار ${q.version}</h3><span class="muted small">${date(q.createdAt)}</span></div><div class="quote-price">${money(q.amount)}</div></div>${priceSummary(q)}<div class="contract-parties"><p><strong>مقدم الخدمة:</strong> ${E(q.parties?.provider || "إنطلاقة للتجارة الإلكترونية")}</p><p><strong>العميل:</strong> ${E(q.parties?.customer?.name || o.customer.name)} · ${E(q.parties?.customer?.email || o.customer.email)}</p><p><strong>رقم الطلب:</strong> ${E(o.number)}</p></div><h3>نطاق الاتفاق</h3><p class="pre">${E(q.agreement)}</p><div class="key-values"><div><span>تاريخ التسليم</span><strong>${date(q.deliveryDate)}</strong></div><div><span>الموافقة</span><strong>${q.acceptedAt ? "وافق العميل في " + date(q.acceptedAt) : "بانتظار موافقة العميل"}</strong></div></div><details open><summary>الشروط المتفق عليها</summary><p class="pre spaced">${E(q.terms)}</p><a class="text-link small" href="#/privacy" target="_blank" rel="noopener">سياسة الخصوصية</a></details>${!history && state.user.id === o.owner && o.status === "quoted" && !q.acceptedAt ? `<form class="spaced" data-form="accept" data-id="${o.id}" data-contract="${q.id}">${errors()}<label class="check"><input name="accept" type="checkbox" required><span>قرأت الاتفاق والسعر وموعد التسليم والشروط وسياسة الخصوصية وأوافق عليها.</span></label><button type="submit" class="btn">الموافقة على العرض والعقد</button></form>` : ""}</div>`;
+  const provider = q.providerDetails || {}, doc = q.document;
+  const documentSections = doc?.sections?.map(section => `<section class="contract-section"><h3>${E(section.title)}</h3><p class="pre">${E(section.body)}</p></section>`).join("") || "";
+  const registrationLabel = provider.registrationType === "freelance_certificate" ? "شهادة العمل الحر" : "وثيقة النشاط";
+  return `<div class="quote"><div class="quote-head"><div><h3>عرض السعر والعقد · الإصدار ${q.version}</h3><span class="muted small">${date(q.createdAt)}${doc ? " · سياسة " + E(doc.policyVersion) : " · نسخة سابقة محفوظة"}</span></div><div class="quote-price">${money(q.amount)}</div></div>${priceSummary(q)}<div class="contract-parties"><p><strong>مقدم الخدمة:</strong> ${E(q.parties?.provider || "إنطلاقة للتجارة الإلكترونية")}</p>${provider.address ? `<p><strong>العنوان:</strong> ${E(provider.address)}</p>` : ""}${provider.registrationNumber ? `<p><strong>${registrationLabel}:</strong> <b dir="ltr">${E(provider.registrationNumber)}</b></p>` : ""}${provider.activity ? `<p><strong>النشاط:</strong> ${E(provider.activity)}</p>` : ""}${provider.email || provider.phone ? `<p><strong>التواصل:</strong> ${E(provider.email || "")} · ${E(provider.phone || "")}</p>` : ""}<p><strong>العميل:</strong> ${E(q.parties?.customer?.name || o.customer.name)} · ${E(q.parties?.customer?.email || o.customer.email)}</p><p><strong>رقم الطلب:</strong> ${E(o.number)}</p></div><h3>نطاق الاتفاق</h3><p class="pre">${E(q.agreement)}</p><div class="key-values"><div><span>تاريخ التسليم</span><strong>${date(q.deliveryDate)}</strong></div><div><span>الموافقة</span><strong>${q.acceptedAt ? "وافق العميل في " + date(q.acceptedAt) : "بانتظار موافقة العميل"}</strong></div></div>${documentSections}<section class="contract-section"><h3>${doc ? "شروط الإصدار الإضافية" : "الشروط المتفق عليها"}</h3><p class="pre">${E(q.terms)}</p></section><p class="small muted">الموافقة سجل إلكتروني مرتبط بهذا الإصدار. تغييرات السعر أو النطاق أو البنود تتطلب نسخة جديدة وموافقة جديدة.</p><div class="actions no-print">${link("/contract/"+o.id+"/"+q.id,"عرض العقد وحفظه أو طباعته","secondary")}</div>${!history && state.user?.id === o.owner && o.status === "quoted" && !q.acceptedAt ? `<form class="spaced no-print" data-form="accept" data-id="${o.id}" data-contract="${q.id}">${errors()}<label class="check"><input name="accept" type="checkbox" required><span>قرأت بيانات الطرفين والنطاق والمخرجات والسعر والتسليم والتعديلات والدعم والملكية والإلغاء وجميع بنود هذا الإصدار وأوافق عليها.</span></label><button type="submit" class="btn">الموافقة على هذا الإصدار من العقد</button></form>` : ""}</div>`;
+}
+async function contractDocument(oid, cid) {
+  const o = await api("/api/orders/" + oid);
+  const q = o.contracts.find(q => q.id === cid);
+  if (!q) throw Error("نسخة العقد غير موجودة.");
+  return `<div class="wrap"><article class="panel printable-contract"><div class="eyebrow">انطلاقة · سجل تعاقد</div><h1>عقد ${E(o.title)}</h1>${contractCard(q,o,true)}<div class="button-row spaced no-print"><button class="btn" data-action="print">طباعة أو حفظ PDF</button>${link("/order/"+o.id,"العودة إلى الطلب","secondary")}</div></article></div>`;
 }
 function paymentCard(o) {
   if (!o.amount) return "";
@@ -540,6 +621,7 @@ function adminOrderControls(o) {
 async function orderDetail(path, oid) {
   const o = await api("/api/orders/" + oid),
     q = o.contracts.find((q) => q.id === o.currentContract);
+  if (state.user?.role === "admin") o.contractProvider = await api("/api/admin/contract-provider").catch(() => ({}));
   return workspace(
     path,
     `<div class="breadcrumb"><a href="#${state.user.role === "admin" ? "/admin/orders" : "/orders"}">الطلبات</a><span>/</span><span dir="ltr">${E(o.number)}</span></div>${pageHead(E(o.title), `${o.type === "product" ? "طلب منتج رقمي" : "طلب خدمة"} · ${date(o.createdAt)}`, badge(o))}${o.type === "service" ? progress(o) : ""}<div class="two-col"><div><section class="panel"><h2>تفاصيل الطلب</h2><p class="pre">${E(o.description)}</p>${o.siteOptions ? `<div class="notice"><strong>النموذج: ${E(o.siteOptions.template.title)}</strong><p>الإضافات المطلوبة: ${o.siteOptions.addons.map(a=>E(a.title)).join("، ") || "دون إضافات"}. يشملها العرض فقط بحسب الاتفاق المكتوب.</p></div>` : ""}${!o.amount ? priceSummary(o) : ""}<div class="key-values"><div><span>صاحب الطلب</span><strong>${E(o.customer.name)}</strong></div><div><span>الميزانية المذكورة</span><strong>${E(o.budget || "غير محددة")}</strong></div></div></section>${
@@ -556,7 +638,7 @@ async function orderDetail(path, oid) {
               : ""
           }</section>`
         : ""
-    }${state.user.role === "admin" && o.type === "service" && (!o.payment?.confirmed || o.payment.revoked) && ["received", "reviewing", "quoted", "awaiting_payment"].includes(o.status) ? `<section class="panel"><h2>${q ? "إصدار عرض جديد" : "إعداد عرض السعر والعقد"}</h2><form data-form="quote" data-id="${o.id}">${errors()}${textarea("agreement", "الاتفاق ونطاق العمل", 'required minlength="10" maxlength="10000"')}${field("amount", "السعر قبل خصم الإطلاق (ر.س)", "number", 'required min="1" max="1000000" step="0.01"')}${field("deliveryDate", "تاريخ التسليم", "date", "required")}${textarea("terms", "شروط الاتفاق", 'required minlength="10" maxlength="10000"')}<div class="notice">اكتب المخرجات وحدود النطاق، التعديلات، الرسوم الخارجية، الضريبة إن وجبت، التسليم وحقوق الملفات، وآلية الإلغاء والدعم. السعر المدخل قبل خصم الإطلاق؛ يحسب الخادم الخصم المحفوظ للطلب ويظهر الإجمالي النهائي للعميل. بيّن الإضافات المختارة ورسوم التجديد في الاتفاق. يحفظ كل إصدار مستقلًا ويتطلب موافقة جديدة.</div><button class="btn" type="submit">إرسال العرض للعميل</button></form></section>` : ""}<section class="panel"><h2>محادثة الطلب</h2>${o.messages.length ? o.messages.map((x) => `<div class="message ${x.role === "admin" ? "admin" : ""}"><div class="message-meta"><strong>${E(x.by)}${x.role === "admin" ? " · فريق انطلاقة" : ""}</strong><span>${time(x.at)}</span></div><p class="pre">${E(x.message)}</p></div>`).join("") : '<p class="muted small">أضف سؤالًا أو ملاحظة لفريق العمل.</p>'}<form data-form="message" data-id="${o.id}" class="spaced">${errors()}${textarea("message", "رسالتك", 'required maxlength="4000"')}<button class="btn" type="submit">إرسال الرسالة</button></form></section><section class="panel"><h2>المرفقات</h2>${o.files.map((f) => `<div class="file-row"><div class="file-info"><strong>${f.purpose === "payment_receipt" ? "إيصال تحويل بنكي · " : ""}${E(f.name)}</strong><small>${E(f.by)} · ${(f.size / 1024).toFixed(0)} KB</small></div><a class="btn secondary small" href="/api/orders/${o.id}/files/${f.id}">${icon("download")} تنزيل</a></div>`).join("") || '<p class="small muted">لا توجد مرفقات بعد.</p>'}<form class="spaced" data-form="order-file" data-id="${o.id}">${errors()}<div class="field"><label for="attachment">إضافة ملف أو إثبات دفع</label><input class="file-input" id="attachment" name="file" type="file" accept=".pdf,.png,.jpg,.jpeg" required><p class="hint">PDF أو PNG أو JPEG، حتى 10 ميجابايت. الملفات متاحة لك وللإدارة فقط.</p></div><button class="btn secondary" type="submit">رفع المرفق</button></form></section></div><aside>${paymentCard(o)}${adminOrderControls(o)}<section class="panel"><h2>سجل المشروع</h2><ul class="timeline">${[
+    }${state.user.role === "admin" && o.type === "service" && (!o.payment?.confirmed || o.payment.revoked) && ["received", "reviewing", "quoted", "awaiting_payment"].includes(o.status) ? quoteForm(o,q) : ""}<section class="panel"><h2>محادثة الطلب</h2>${o.messages.length ? o.messages.map((x) => `<div class="message ${x.role === "admin" ? "admin" : ""}"><div class="message-meta"><strong>${E(x.by)}${x.role === "admin" ? " · فريق انطلاقة" : ""}</strong><span>${time(x.at)}</span></div><p class="pre">${E(x.message)}</p></div>`).join("") : '<p class="muted small">أضف سؤالًا أو ملاحظة لفريق العمل.</p>'}<form data-form="message" data-id="${o.id}" class="spaced">${errors()}${textarea("message", "رسالتك", 'required maxlength="4000"')}<button class="btn" type="submit">إرسال الرسالة</button></form></section><section class="panel"><h2>المرفقات</h2>${o.files.map((f) => `<div class="file-row"><div class="file-info"><strong>${f.purpose === "payment_receipt" ? "إيصال تحويل بنكي · " : ""}${E(f.name)}</strong><small>${E(f.by)} · ${(f.size / 1024).toFixed(0)} KB</small></div><a class="btn secondary small" href="/api/orders/${o.id}/files/${f.id}">${icon("download")} تنزيل</a></div>`).join("") || '<p class="small muted">لا توجد مرفقات بعد.</p>'}<form class="spaced" data-form="order-file" data-id="${o.id}">${errors()}<div class="field"><label for="attachment">إضافة ملف أو إثبات دفع</label><input class="file-input" id="attachment" name="file" type="file" accept=".pdf,.png,.jpg,.jpeg" required><p class="hint">PDF أو PNG أو JPEG، حتى 10 ميجابايت. الملفات متاحة لك وللإدارة فقط.</p></div><button class="btn secondary" type="submit">رفع المرفق</button></form></section></div><aside>${paymentCard(o)}${adminOrderControls(o)}<section class="panel"><h2>سجل المشروع</h2><ul class="timeline">${[
       ...o.events,
     ]
       .reverse()
@@ -641,7 +723,7 @@ async function support(path) {
   const tickets = await api("/api/tickets");
   return workspace(
     path,
-    `${pageHead(state.user.role === "admin" ? "تذاكر الدعم" : "الدعم والمساعدة", "محادثة خاصة لمتابعة سؤالك مع الفريق.")}<div class="two-col"><section class="panel"><h2>التذاكر</h2>${tickets.length ? tickets.map((t) => `<details class="ticket"><summary><span class="ticket-head"><strong>${E(t.subject)}</strong><span class="badge ${t.status === "closed" ? "completed" : "received"}">${t.status === "closed" ? "مغلقة" : "مفتوحة"}</span></span><span class="small muted">${E(t.name)} · ${date(t.createdAt)}</span></summary><div class="spaced">${t.messages.map((m) => `<div class="message ${m.role === "admin" ? "admin" : ""}"><div class="message-meta"><strong>${E(m.by)}</strong><span>${date(m.at)}</span></div><p class="pre">${E(m.message)}</p></div>`).join("")}<form data-form="ticket-reply" data-id="${t.id}">${errors()}${textarea("message", "إضافة رد", 'required maxlength="5000"')}${state.user.role === "admin" ? `<div class="field"><label for="ticket-status-${t.id}">حالة التذكرة</label><select id="ticket-status-${t.id}" name="status"><option value="open" ${t.status === "open" ? "selected" : ""}>مفتوحة</option><option value="closed" ${t.status === "closed" ? "selected" : ""}>مغلقة</option></select></div>` : ""}<button class="btn" type="submit">إرسال الرد</button></form></div></details>`).join("") : '<p class="muted">لا توجد تذاكر حتى الآن.</p>'}</section><section class="panel"><h2>تذكرة جديدة</h2><form data-form="ticket">${errors()}${field("subject", "عنوان السؤال", "text", 'required minlength="3" maxlength="180"')}${textarea("message", "كيف يمكننا مساعدتك؟", 'required minlength="10" maxlength="5000"')}<button class="btn" type="submit">إرسال التذكرة</button></form></section></div>`,
+    `${pageHead(state.user.role === "admin" ? "تذاكر الدعم" : "الدعم والمساعدة", "محادثة خاصة لمتابعة سؤالك مع الفريق.")}<section class="panel contact-channel"><h2>قناة WhatsApp</h2><p>راسل فريق انطلاقة على الرقم 0553575760. يفتح الزر محادثة مباشرة؛ لا يرسل بيانات حسابك أو طلباتك تلقائيًا. لحفظ الملاحظات ضمن مشروعك، استخدم محادثة الطلب أو تذكرة الدعم.</p>${whatsappLink()}</section><div class="two-col"><section class="panel"><h2>التذاكر</h2>${tickets.length ? tickets.map((t) => `<details class="ticket"><summary><span class="ticket-head"><strong>${E(t.subject)}</strong><span class="badge ${t.status === "closed" ? "completed" : "received"}">${t.status === "closed" ? "مغلقة" : "مفتوحة"}</span></span><span class="small muted">${E(t.name)} · ${date(t.createdAt)}</span></summary><div class="spaced">${t.messages.map((m) => `<div class="message ${m.role === "admin" ? "admin" : ""}"><div class="message-meta"><strong>${E(m.by)}</strong><span>${date(m.at)}</span></div><p class="pre">${E(m.message)}</p></div>`).join("")}<form data-form="ticket-reply" data-id="${t.id}">${errors()}${textarea("message", "إضافة رد", 'required maxlength="5000"')}${state.user.role === "admin" ? `<div class="field"><label for="ticket-status-${t.id}">حالة التذكرة</label><select id="ticket-status-${t.id}" name="status"><option value="open" ${t.status === "open" ? "selected" : ""}>مفتوحة</option><option value="closed" ${t.status === "closed" ? "selected" : ""}>مغلقة</option></select></div>` : ""}<button class="btn" type="submit">إرسال الرد</button></form></div></details>`).join("") : '<p class="muted">لا توجد تذاكر حتى الآن.</p>'}</section><section class="panel"><h2>تذكرة جديدة</h2><form data-form="ticket">${errors()}${field("subject", "عنوان السؤال", "text", 'required minlength="3" maxlength="180"')}${textarea("message", "كيف يمكننا مساعدتك؟", 'required minlength="10" maxlength="5000"')}<button class="btn" type="submit">إرسال التذكرة</button></form></section></div>`,
   );
 }
 function profile(path) {
@@ -694,7 +776,7 @@ function serviceDetail(sid) {
   return `<div class="wrap"><nav class="breadcrumbs" aria-label="مسار الصفحة"><a href="#/services">خدماتنا</a><span>/</span><span>${E(s.title)}</span></nav><section class="service-detail"><div class="service-detail-copy"><span class="eyebrow">${E(s.category)}</span><h1>${E(s.title)}</h1><p>${E(s.description)}</p><div class="actions">${link("/start?service=" + s.id, "اطلب هذه الخدمة " + icon("arrow"))}<button class="btn secondary" type="button" data-assistant-open>استكشف مع المساعد ${icon("spark")}</button></div>${servicePrice(s, true)}<p class="service-assurance">عرض سعر ونطاق عمل واضح قبل البدء.</p></div><img class="detail-art" src="${(artwork[s.id] || artwork.website).image}" alt="${E(s.title)}" width="1536" height="1024"></section><section class="service-includes"><div><span class="eyebrow">تفاصيل تصنع بداية أفضل</span><h2>ما الذي نعمل عليه معك؟</h2><p>نحدّد المخرجات النهائية بحسب مشروعك في عرض الخدمة.</p></div><div class="includes-list">${(s.includes || []).map((item, i) => `<div><span>0${i + 1}</span><h3>${E(item)}</h3>${icon("check")}</div>`).join("")}</div></section>${external ? '<p class="service-fineprint">الرسوم والاشتراكات وحسابات الجهات الخارجية تُحدَّد حسب الاتفاق. تخضع الموافقات والنشر لشروط ومراجعة كل منصة.</p>' : ""}${s.id === "ready-website" ? link("/ready-websites", "معاينة النماذج والخيارات", "secondary") : ""}${nextStep(s.id)}<section class="section">${processSteps()}</section></div>`;
 }
 function legal(privacy) {
-  return `<div class="wrap"><article class="legal panel"><div class="eyebrow">انطلاقة</div><h1>${privacy ? "سياسة الخصوصية" : "الشروط والأحكام"}</h1>${privacy ? `<h2>قياس الزيارات الاختياري</h2><p>عند تفعيل Google Analytics، نطلب موافقتك قبل تحميله ونقيس صفحات الخدمات العامة فقط. لا نرسل بيانات الحسابات والطلبات والملفات أو رموز الدخول. يمكنك الرفض أو سحب الموافقة من خيارات قياس الزيارات أسفل الموقع. يعالج Google بيانات الزيارة وفق سياساته.</p><h2>المساعد الذكي</h2><p>عند تفعيل المساعد وإرسال رسالة إليه، تُرسل رسائلك وسياق المحادثة إلى OpenAI لإنتاج الرد. لا نرسل إليه طلباتك الخاصة أو ملفاتك، ولا نحفظ المحادثة في قاعدة بيانات المنصة. تُدار بيانات المزود وفق سياسته. لا ترسل كلمات المرور أو بيانات الدفع.</p><h2>ما الذي نحفظه؟</h2><p>نحفظ الاسم والبريد الإلكتروني وبيانات الحساب، وتفاصيل الطلبات والعقود والموافقات، والرسائل والمرفقات وبيانات الدفع التي تسجلها الإدارة. عند توثيق رقم الجوال نحفظ الرقم وحالة التوثيق.</p><h2>لماذا نستخدم هذه البيانات؟</h2><p>لإدارة حسابك وتنفيذ طلباتك والرد على استفساراتك وحماية الوصول إلى ملفاتك. لا تعرض المنصة طلباتك ومرفقاتك للزوار أو العملاء الآخرين.</p><h2>من يصل إليها؟</h2><p>صاحب الحساب وإدارة انطلاقة بحسب الحاجة إلى تنفيذ الخدمة. عند تفعيل التحقق بالجوال يُرسل رقمك إلى مزود الرسائل لإرسال رمز التحقق. تخزَّن البيانات لدى مزود الاستضافة.</p><h2>ملفات الارتباط</h2><p>نستخدم ملف ارتباط ضروريًا لتسجيل الدخول وحماية الجلسة. تنتهي الجلسة عند تسجيل الخروج أو بعد انتهاء مدتها.</p><h2>طلبات الخصوصية</h2><p>يمكنك طلب مراجعة بياناتك أو تصحيحها أو حذفها عبر تذكرة دعم داخل حسابك. تخضع بيانات الطلبات والعقود المكتملة للحاجة إلى حفظ سجل التعامل.</p>` : `<h2>الحساب واستخدام المنصة</h2><p>استخدم معلومات صحيحة وحافظ على سرية كلمة المرور. لا ترفع محتوى لا تملك حق استخدامه، أو ملفات ضارة أو بيانات شخصية لا تحتاجها الخدمة.</p><h2>طلبات الخدمات</h2><p>إرسال طلب مشروع لا ينشئ التزامًا بالدفع. يتحدد نطاق العمل والسعر وموعد التسليم في العرض والعقد الذي تراجعه وتوافق عليه داخل حسابك.</p><h2>الموافقات والتعديلات</h2><p>تُحفظ موافقتك مع وقتها وإصدار الاتفاق. تغيير نطاق العمل أو السعر يحتاج اتفاقًا جديدًا. تبقى الإصدارات السابقة محفوظة في الطلب.</p><h2>المنتجات الرقمية والدفع</h2><p>راجع وصف المنتج والسعر قبل إنشاء الطلب. تتاح الملفات في حسابك بعد تأكيد الإدارة استلام الدفع. رفع إثبات التحويل لا يُعد تأكيدًا تلقائيًا للدفع.</p><h2>المراجعة والاسترداد</h2><p>إذا واجهت مشكلة في المنتج أو الخدمة، افتح تذكرة دعم توضح المشكلة ورقم الطلب لمراجعتها وفق الاتفاق والحقوق النظامية.</p><h2>حقوق الاستخدام</h2><p>تُحدد حقوق استخدام مخرجات الخدمة في الاتفاق. لا يجوز إعادة بيع الملفات الرقمية أو توزيعها إلا إذا كان وصف المنتج أو اتفاق منفصل يجيز ذلك.</p>`}<h2>التواصل</h2><p>للاستفسار عن هذه السياسة أو طلب المساعدة، استخدم <a class="text-link" href="#/support">الدعم والمساعدة</a>${state.config.businessEmail ? " أو البريد " + E(state.config.businessEmail) : ""}.</p></article></div>`;
+  return `<div class="wrap"><article class="legal panel"><div class="eyebrow">انطلاقة</div><h1>${privacy ? "سياسة الخصوصية" : "الشروط والأحكام"}</h1>${privacy ? `<h2>قناة WhatsApp</h2><p>يفتح زر التواصل تطبيق أو موقع WhatsApp على رقم انطلاقة. تختار أنت إرسال الرسالة؛ لا تنقل المنصة تفاصيل حسابك أو ملفاتك تلقائيًا. تخضع المحادثة لسياسات WhatsApp. استخدم تذاكر الدعم لحفظ مراسلات المشروع داخل المنصة.</p><h2>قياس الزيارات الاختياري</h2><p>عند تفعيل Google Analytics، نطلب موافقتك قبل تحميله ونقيس صفحات الخدمات العامة فقط. لا نرسل بيانات الحسابات والطلبات والملفات أو رموز الدخول. يمكنك الرفض أو سحب الموافقة من خيارات قياس الزيارات أسفل الموقع. يعالج Google بيانات الزيارة وفق سياساته.</p><h2>المساعد الذكي</h2><p>عند تفعيل المساعد وإرسال رسالة إليه، تُرسل رسائلك وسياق المحادثة إلى OpenAI لإنتاج الرد. لا نرسل إليه طلباتك الخاصة أو ملفاتك، ولا نحفظ المحادثة في قاعدة بيانات المنصة. تُدار بيانات المزود وفق سياسته. لا ترسل كلمات المرور أو بيانات الدفع.</p><h2>ما الذي نحفظه؟</h2><p>نحفظ الاسم والبريد الإلكتروني وبيانات الحساب، وتفاصيل الطلبات والعقود والموافقات، والرسائل والمرفقات وبيانات الدفع التي تسجلها الإدارة. عند توثيق رقم الجوال نحفظ الرقم وحالة التوثيق.</p><h2>لماذا نستخدم هذه البيانات؟</h2><p>لإدارة حسابك وتنفيذ طلباتك والرد على استفساراتك وحماية الوصول إلى ملفاتك. لا تعرض المنصة طلباتك ومرفقاتك للزوار أو العملاء الآخرين.</p><h2>من يصل إليها؟</h2><p>صاحب الحساب وإدارة انطلاقة بحسب الحاجة إلى تنفيذ الخدمة. عند تفعيل التحقق بالجوال يُرسل رقمك إلى مزود الرسائل لإرسال رمز التحقق. تخزَّن البيانات لدى مزود الاستضافة.</p><h2>ملفات الارتباط</h2><p>نستخدم ملف ارتباط ضروريًا لتسجيل الدخول وحماية الجلسة. تنتهي الجلسة عند تسجيل الخروج أو بعد انتهاء مدتها.</p><h2>طلبات الخصوصية</h2><p>يمكنك طلب مراجعة بياناتك أو تصحيحها أو حذفها عبر تذكرة دعم داخل حسابك. تخضع بيانات الطلبات والعقود المكتملة للحاجة إلى حفظ سجل التعامل.</p>` : `<h2>الحساب واستخدام المنصة</h2><p>استخدم معلومات صحيحة وحافظ على سرية كلمة المرور. لا ترفع محتوى لا تملك حق استخدامه، أو ملفات ضارة أو بيانات شخصية لا تحتاجها الخدمة.</p><h2>طلبات الخدمات</h2><p>إرسال طلب مشروع لا ينشئ التزامًا بالدفع. يتحدد نطاق العمل والسعر وموعد التسليم في العرض والعقد الذي تراجعه وتوافق عليه داخل حسابك.</p><h2>الموافقات والتعديلات</h2><p>تُحفظ موافقتك مع وقتها وإصدار الاتفاق. تغيير نطاق العمل أو السعر يحتاج اتفاقًا جديدًا. تبقى الإصدارات السابقة محفوظة في الطلب.</p><h2>المنتجات الرقمية والدفع</h2><p>راجع وصف المنتج والسعر قبل إنشاء الطلب. تتاح الملفات في حسابك بعد تأكيد الإدارة استلام الدفع. رفع إثبات التحويل لا يُعد تأكيدًا تلقائيًا للدفع.</p><h2>النطاق والمراجعة والدعم</h2><p>يحدد كل عقد المخرجات والاستثناءات والمتطلبات وجولات التعديل ومهلة الملاحظات ودعم تصحيح العيوب. لا يعد صمت العميل موافقة تلقائية؛ يوثق اعتماد التسليم والملاحظات في الطلب. الأعمال الإضافية تحتاج عرضًا وموافقة مستقلة.</p><h2>الإلغاء والاسترداد والتأخير</h2><p>قدّم طلب الإلغاء أو عدم المطابقة عبر تذكرة دعم ليحفظ ضمن سجل الطلب. تراجع الرسوم والأعمال المنفذة وفق العقد والحقوق النظامية؛ لا تعني إضافة خدمة مخصصة إسقاط جميع حقوق الإلغاء. يبقى حق العدول خلال سبعة أيام عند عدم الانتفاع والاستثناءات المنطبقة، وحقوق عدم المطابقة والتأخر، وفق النظام. لا ينفذ النظام استردادًا بنكيًا تلقائيًا.</p><h2>هوية مقدم الخدمة والرسوم</h2><p>يتضمن العقد اسم مقدم الخدمة القانوني وعنوانه وبيانات وثيقة نشاطه إن وجدت، والإجمالي شامل الرسوم والضرائب الواجبة، مع فصل رسوم المزوّد الخارجي وتجديدها. لا تحجز استضافة أو دومين بمجرد إرسال الطلب.</p><h2>حقوق الاستخدام</h2><p>تُحدد حقوق استخدام مخرجات الخدمة في الاتفاق. لا يجوز إعادة بيع الملفات الرقمية أو توزيعها إلا إذا كان وصف المنتج أو اتفاق منفصل يجيز ذلك.</p>`}<h2>التواصل</h2><p>للاستفسار عن هذه السياسة أو طلب المساعدة، استخدم <a class="text-link" href="#/support">الدعم والمساعدة</a>${state.config.businessEmail ? " أو البريد " + E(state.config.businessEmail) : ""}.</p></article></div>`;
 }
 
 async function render() {
@@ -702,6 +784,15 @@ async function render() {
   const raw = location.hash.slice(1) || "/";
   const [path, search = ""] = raw.split("?");
   const query = new URLSearchParams(search);
+  if (path === "/reset-password" && query.has("token")) {
+    clearRecovery();
+    const token = query.get("token") || "";
+    if (/^[a-f0-9]{64}$/.test(token)) state.resetToken = token;
+    window.history.replaceState(null, "", "#/reset-password");
+    query.delete("token");
+  } else if (!["/forgot-password", "/verify", "/reset-password"].includes(path)) {
+    clearRecovery();
+  }
   header(path);
   main.innerHTML =
     '<div class="page-loading" role="status">جارٍ التحميل…</div>';
@@ -719,7 +810,7 @@ async function render() {
         "/notifications",
         "/support",
         "/profile",
-      ].includes(path) || /^\/(order|invoice|checkout|admin)(\/|$)/.test(path);
+      ].includes(path) || /^\/(order|contract|invoice|checkout|admin)(\/|$)/.test(path);
     let html;
     if (privateRoute && !state.user) html = authRequired(raw);
     else if (path.startsWith("/admin") && state.user?.role !== "admin")
@@ -732,8 +823,13 @@ async function render() {
     else if (path.startsWith("/service/"))
       html = serviceDetail(path.split("/")[2]);
     else if (path === "/about") html = about();
+    else if (path === "/forgot-password") html = forgotPassword();
+    else if (path === "/verify") html = verifyRecovery();
+    else if (path === "/reset-password") html = resetPassword();
     else if (path === "/login" || path === "/register") {
       html = authPage(path === "/register", query);
+      if (path === "/login")
+        html = html.replace('</form>', '</form><p class="small spaced"><a class="text-link" href="#/forgot-password">نسيت كلمة المرور؟</a></p>');
       if (path === "/login" && state.config.smsReady)
         html = html.replace(
           '<p class="auth-switch">',
@@ -752,6 +848,7 @@ async function render() {
     else if (path.startsWith("/checkout/"))
       html = await checkout(path.split("/")[2]);
     else if (path === "/contracts") html = await contracts(path);
+    else if (path.startsWith("/contract/")) html = await contractDocument(path.split("/")[2],path.split("/")[3]);
     else if (path === "/invoices") html = await invoices(path);
     else if (path.startsWith("/invoice/"))
       html = await invoice(path.split("/")[2]);
@@ -786,8 +883,12 @@ document.addEventListener("submit", async (event) => {
   const form = event.target.closest("form[data-form]");
   if (!form) return;
   event.preventDefault();
+  const recoveryForm = form.dataset.form.startsWith("recovery-");
+  if (recoveryForm && form.dataset.submitting === "true") return;
+  if (recoveryForm) form.dataset.submitting = "true";
   const button = form.querySelector("button[type=submit]");
   const old = button.textContent;
+  const initiallyDisabled = button.disabled;
   button.disabled = true;
   button.textContent = "جارٍ الحفظ…";
   const error = form.querySelector(".error");
@@ -796,7 +897,66 @@ document.addEventListener("submit", async (event) => {
     kind = form.dataset.form,
     oid = form.dataset.id;
   try {
-    if (kind === "register" || kind === "login") {
+    if (kind === "recovery-request") {
+      const channel = form.dataset.channel;
+      const available = channel === "email"
+        ? state.config?.recovery?.emailReady
+        : channel === "whatsapp" ? state.config?.recovery?.whatsappReady : false;
+      if (available !== true) throw Error("قناة الاستعادة المختارة غير مفعّلة حاليًا. اختر قناة متاحة.");
+      const sequence = state.sequence, requestHash = location.hash;
+      clearRecovery();
+      const operation = state.recoveryOperation;
+      const result = await api("/api/auth/recovery/request", {
+        method: "POST",
+        body: { channel, identifier: String(b.identifier || "").trim() },
+      });
+      if (sequence !== state.sequence || location.hash !== requestHash || operation !== state.recoveryOperation) return;
+      state.recoveryChallenge = result.challengeId;
+      state.recoveryChannel = channel;
+      state.recoveryMessage = result.message;
+      if (channel === "whatsapp") go("/verify");
+      await render();
+    } else if (kind === "recovery-verify") {
+      if (!state.recoveryChallenge || state.recoveryChannel !== "whatsapp")
+        throw Error("اطلب رمز استعادة جديدًا أولًا.");
+      if (!/^[0-9]{4,10}$/.test(String(b.code || "")))
+        throw Error("أدخل رمز الاستعادة من 4 إلى 10 أرقام.");
+      const sequence = state.sequence, requestHash = location.hash;
+      const operation = state.recoveryOperation, challengeId = state.recoveryChallenge;
+      const result = await api("/api/auth/recovery/verify", {
+        method: "POST",
+        body: { challengeId, code: b.code },
+      });
+      if (sequence !== state.sequence || location.hash !== requestHash || operation !== state.recoveryOperation || state.recoveryChallenge !== challengeId) return;
+      if (!/^[a-f0-9]{64}$/.test(result.resetToken || ""))
+        throw Error("تعذر إكمال الاستعادة. اطلب رمزًا جديدًا.");
+      state.resetToken = result.resetToken;
+      state.resetExpiresAt = Date.now() + Math.min(Number(result.expiresIn) || 1800, 1800) * 1000;
+      state.recoveryChallenge = null;
+      state.recoveryMessage = "";
+      go("/reset-password");
+      await render();
+    } else if (kind === "recovery-reset") {
+      if (!state.resetToken || (state.resetExpiresAt && Date.now() >= state.resetExpiresAt))
+        throw Error("انتهت صلاحية الاستعادة. اطلب رابطًا أو رمزًا جديدًا.");
+      if (typeof b.password !== "string" || b.password.length < 12 || b.password.length > 128)
+        throw Error("استخدم كلمة مرور بين 12 و128 حرفًا.");
+      if (b.password !== b.passwordConfirm) throw Error("كلمتا المرور غير متطابقتين.");
+      const sequence = state.sequence, token = state.resetToken, requestHash = location.hash;
+      const operation = state.recoveryOperation;
+      const requestUser = state.user, requestCsrf = state.csrf;
+      const result = await api("/api/auth/recovery/reset", {
+        method: "POST",
+        body: { token, password: b.password },
+      });
+      const sameSession = state.user === requestUser && state.csrf === requestCsrf;
+      if (sameSession) clearSession();
+      if (!sameSession || sequence !== state.sequence || location.hash !== requestHash || operation !== state.recoveryOperation || state.resetToken !== token) return;
+      clearRecovery();
+      go("/login");
+      await render();
+      notify(result.message || "تم تغيير كلمة المرور. سجّل الدخول بكلمتك الجديدة.");
+    } else if (kind === "register" || kind === "login") {
       const result = await api("/api/auth/" + kind, {
         method: "POST",
         body: { ...b, acceptTerms: !!b.acceptTerms },
@@ -839,7 +999,7 @@ document.addEventListener("submit", async (event) => {
         kind === "accept"
           ? { accept: !!b.accept, contractId: form.dataset.contract }
           : kind === "quote"
-            ? { ...b, amount: Math.round(Number(b.amount) * 100) }
+            ? { agreement:b.agreement,terms:b.terms,deliveryDate:b.deliveryDate,amount:Math.round(Number(b.amount)*100),contractDetails:{provider:{legalName:b.providerLegalName,address:b.providerAddress,registrationNumber:b.providerRegistrationNumber,registrationType:b.providerRegistrationType,activity:b.providerActivity},deliverables:b.deliverables,exclusions:b.exclusions,clientRequirements:b.clientRequirements,thirdPartyCosts:b.thirdPartyCosts,revisions:Number(b.revisions),reviewDays:Number(b.reviewDays),supportDays:Number(b.supportDays),ownership:b.ownership,cancellation:b.cancellation} }
             : b;
       await api(`/api/orders/${oid}/${action}`, {
         method: "POST",
@@ -953,7 +1113,8 @@ document.addEventListener("submit", async (event) => {
       } else notify(e.message);
     }
   } finally {
-    button.disabled = false;
+    if (recoveryForm) delete form.dataset.submitting;
+    button.disabled = initiallyDisabled;
     button.textContent = old;
   }
 });

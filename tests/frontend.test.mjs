@@ -99,7 +99,7 @@ async function app({ hash = "#/", session = {}, fetch: request, settings = confi
       throw new Error("Unexpected request: " + path);
     },
   });
-  const runtime = await new vm.Script(`(async () => { ${source}\nreturn { state, render, api, go, header, paymentCard, serviceDetail, priceSummary, launchBanner, readyWebsites, start }; })()`).runInContext(context);
+  const runtime = await new vm.Script(`(async () => { ${source}\nreturn { state, render, api, go, header, paymentCard, serviceDetail, priceSummary, launchBanner, readyWebsites, start, whatsappLink, quoteForm, contractCard, contractDocument }; })()`).runInContext(context);
   return {
     ...runtime, nodes, location, requests, document,
     async event(name, event) {
@@ -107,6 +107,52 @@ async function app({ hash = "#/", session = {}, fetch: request, settings = confi
     },
   };
 }
+
+test("WhatsApp starts a direct channel without copying private customer data", async () => {
+  const ui = await app();
+  ui.state.user = { id:"private-user",name:"Private customer",email:"private@example.test" };
+  const html = ui.whatsappLink();
+  assert.match(html,/https:\/\/wa.me\/966553575760\?text=/);
+  assert.match(html,/noopener noreferrer/);
+  assert.doesNotMatch(html,/private-user|Private customer|private@example/);
+});
+
+test("structured contracts require provider and scope details and display a saved version safely", async () => {
+  const ui = await app();
+  const order = {id:"test-order",number:"INT-TEST",owner:"customer",description:"طلب اختبار محلي",customer:{name:"عميل",email:"customer@example.test"},status:"quoted"};
+  const form = ui.quoteForm(order,null);
+  for(const field of ["providerLegalName","providerAddress","deliverables","exclusions","clientRequirements","thirdPartyCosts","revisions","reviewDays","supportDays","ownership","cancellation"]) assert.match(form,new RegExp(`name="${field}"[^>]*required`));
+  const quote = {id:"contract-old",version:2,amount:99000,createdAt:"2026-10-01",deliveryDate:"2026-11-01",agreement:"نطاق محفوظ",terms:"شروط محفوظة",parties:{provider:"المقدم القديم",customer:order.customer},providerDetails:{registrationType:"freelance_certificate",registrationNumber:"FL-TEST"},document:{policyVersion:"2026-10-01",sections:[{title:"الملكية",body:"<img src=x onerror=alert(1)>"}]}};
+  const html = ui.contractCard(quote,order,true);
+  assert.match(html,/شهادة العمل الحر/);
+  assert.match(html,/المقدم القديم/);
+  assert.match(html,/&lt;img/);
+  assert.doesNotMatch(html,/<img src=x/);
+  assert.match(html,/#\/contract\/test-order\/contract-old/);
+});
+
+test("contract documents require login and preserve the requested version", async () => {
+  const ui = await app({hash:"#/contract/private-order/saved-version"});
+  assert.match(ui.nodes.get("#main").innerHTML,/تسجيل الدخول/);
+  assert.match(ui.nodes.get("#main").innerHTML,/next=%2Fcontract%2Fprivate-order%2Fsaved-version/);
+  assert.equal(ui.requests.some(r=>r.path.includes("private-order")),false);
+});
+
+test("the contract form sends validated field groups and converts riyals to halalas", async () => {
+  let saved;
+  const ui = await app({hash:"#/services",session:{user:{id:"admin",role:"admin",name:"مشرف"},csrf:"test-csrf"},fetch:async(path,options)=>{
+    if(path==="/api/orders/test-order/quote") {saved=JSON.parse(options.body);return response({});}
+  }});
+  const button={textContent:"إرسال",disabled:false};
+  const form={dataset:{form:"quote",id:"test-order"},fields:{agreement:"نطاق الاختبار",terms:"شروط الاختبار",deliveryDate:"2026-12-01",amount:"999.99",providerLegalName:"مقدم اختبار",providerAddress:"عنوان اختبار محلي",providerRegistrationNumber:"FL-LOCAL",providerRegistrationType:"freelance_certificate",providerActivity:"نشاط تجريبي",deliverables:"ملفات الموقع المتفق عليها",exclusions:"استثناءات الاختبار",clientRequirements:"المحتوى المعتمد",thirdPartyCosts:"رسوم مزود خارجية",revisions:"2",reviewDays:"7",supportDays:"30",ownership:"حقوق الاستخدام المحددة",cancellation:"آلية إلغاء محددة"},querySelector(selector){return selector==="button[type=submit]"?button:null;}};
+  await ui.event("submit",{preventDefault(){},target:{closest(){return form;}}});
+  assert.equal(saved.amount,99999);
+  assert.equal(saved.contractDetails.provider.registrationType,"freelance_certificate");
+  assert.equal(saved.contractDetails.revisions,2);
+  assert.equal(saved.contractDetails.supportDays,30);
+  assert.equal(saved.providerAddress,undefined);
+  assert.equal(button.disabled,false);
+});
 
 test("initial connection failure offers a retry that reloads config and session", async () => {
   let attempts = 0;

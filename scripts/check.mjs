@@ -9,6 +9,8 @@ for (const file of [
   "public/assistant.js",
   "lib/security.js",
   "lib/promotion.js",
+  "lib/contracts.js",
+  "lib/recovery.js",
   "public/integrations.js",
   "public/app.js",
 ]) {

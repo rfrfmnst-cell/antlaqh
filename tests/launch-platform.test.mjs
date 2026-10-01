@@ -4,6 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
+import { contractDetailsFixture } from "./contract-fixture.mjs";
 
 test("launch purchase preserves valid choices, calculates each quote once, and keeps bank-only payment", async () => {
   const dir = await mkdtemp(join(tmpdir(), "antlaqh-launch-"));
@@ -18,6 +19,8 @@ test("launch purchase preserves valid choices, calculates each quote once, and k
     if (!app.server.listening) await new Promise(done => app.server.once("listening", done));
     const base = "http://127.0.0.1:" + app.server.address().port;
     async function req(path, body, actor) {
+      if (path.endsWith("/quote") && body && body.contractDetails === undefined)
+        body = { ...body, contractDetails: structuredClone(contractDetailsFixture) };
       const response = await fetch(base + path, { method: body ? "POST" : "GET", headers: { ...(body ? { Origin:"http://localhost:39999", "Content-Type":"application/json" } : {}), ...(actor ? { Cookie:actor.cookie, "X-CSRF-Token":actor.csrf } : {}) }, body: body ? JSON.stringify(body) : undefined });
       const data = await response.json();
       return { status:response.status, data, headers:response.headers };
