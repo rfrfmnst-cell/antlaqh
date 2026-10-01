@@ -1,9 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Worker } from "node:worker_threads";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
+
+const { version } = JSON.parse(
+  await readFile(new URL("../package.json", import.meta.url), "utf8"),
+);
 
 test(
   "LiteSpeed-style require starts the ESM application through server.cjs",
@@ -59,7 +63,7 @@ test(
       assert.equal(response.status, 200);
       assert.deepEqual(await response.json(), {
         status: "ok",
-        version: "5.0.0",
+        version,
       });
     } finally {
       if (worker) await worker.terminate();

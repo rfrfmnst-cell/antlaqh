@@ -22,16 +22,18 @@ const mockReply = () =>
       headers: { "Content-Type": "application/json" },
     }),
   );
-test("AI is explicitly unavailable without a private key and never calls a provider", async () => {
+test("an OpenAI selection without a key falls back to free guidance and never calls a provider", async () => {
   const app = createAssistant({
+    mode: "openai",
     apiKey: "",
     fetchImpl: () => {
       throw Error("must not call");
     },
     getCatalog: async () => ({ services }),
   });
-  assert.equal(app.ready, false);
-  await assert.rejects(app.reply(messages), { status: 503 });
+  assert.equal(app.ready, true);
+  assert.equal(app.mode, "guided");
+  assert.equal((await app.reply(messages)).mode, "guided");
 });
 test("assistant rejects injected system roles, excessive history and large messages", () => {
   for (const invalid of [
@@ -52,6 +54,7 @@ test("assistant rejects injected system roles, excessive history and large messa
 test("Responses request keeps the key server-side, disables storage and limits output", async () => {
   let sent;
   const app = createAssistant({
+    mode: "openai",
     apiKey: "private-test-key",
     model: "gpt-4.1-mini",
     getCatalog: async () => ({ services }),
@@ -84,6 +87,7 @@ test("provider failures do not leak credentials or raw upstream responses", asyn
     async () => new Response(JSON.stringify({ output: [] })),
   ]) {
     const app = createAssistant({
+      mode: "openai",
       apiKey: "private-test-key",
       getCatalog: async () => ({ services }),
       fetchImpl,
@@ -98,6 +102,7 @@ test("provider failures do not leak credentials or raw upstream responses", asyn
 test("daily assistant request cap is enforced before further provider calls", async () => {
   let calls = 0;
   const app = createAssistant({
+    mode: "openai",
     apiKey: "test",
     dailyLimit: 2,
     getCatalog: async () => ({ services }),
@@ -114,6 +119,7 @@ test("daily assistant request cap is enforced before further provider calls", as
 test("concurrent assistant calls are bounded and release capacity on completion", async () => {
   const release = [];
   const app = createAssistant({
+    mode: "openai",
     apiKey: "test",
     getCatalog: async () => ({ services }),
     fetchImpl: () =>
@@ -133,6 +139,7 @@ test("assistant times out a stalled provider", async () => {
   const keepAlive = setTimeout(() => {}, 1000);
   try {
     const app = createAssistant({
+      mode: "openai",
       apiKey: "test",
       timeoutMs: 10,
       getCatalog: async () => ({ services }),
@@ -153,7 +160,7 @@ test("assistant times out a stalled provider", async () => {
 
 test("provider diagnostics distinguish quota, authentication and model errors without exposing raw details", async () => {
   for (const [status, code, expected] of [[429,"insufficient_quota","AI_QUOTA"],[401,"invalid_api_key","AI_AUTH"],[404,"model_not_found","AI_MODEL"],[403,"forbidden","AI_ACCESS"],[429,"rate_limit_exceeded","AI_RATE"]]) {
-    const app=createAssistant({apiKey:"private-test-key",getCatalog:async()=>({services}),fetchImpl:async()=>new Response(JSON.stringify({error:{code,message:"private-test-key and private account data"}}),{status})});
+    const app=createAssistant({mode:"openai",apiKey:"private-test-key",getCatalog:async()=>({services}),fetchImpl:async()=>new Response(JSON.stringify({error:{code,message:"private-test-key and private account data"}}),{status})});
     await assert.rejects(app.reply(messages),e=>e.status===502 && e.message.includes(expected) && !e.message.includes("private-test-key") && !e.message.includes("private account"));
   }
 });
@@ -162,6 +169,7 @@ test("the deadline covers stalled catalog loading and releases concurrency witho
   let catalogCalls = 0, providerCalls = 0;
   const release = [];
   const app = createAssistant({
+    mode: "openai",
     apiKey: "test",
     timeoutMs: 20,
     getCatalog: () => ++catalogCalls <= 4
@@ -182,7 +190,7 @@ test("the deadline also covers a stalled response body and non-cooperative provi
     () => new Promise(() => {}),
     async () => ({ ok: true, status: 200, json: () => new Promise(() => {}) }),
   ]) {
-    const app = createAssistant({ apiKey: "test", timeoutMs: 10,
+    const app = createAssistant({ mode: "openai", apiKey: "test", timeoutMs: 10,
       getCatalog: async () => ({ services }), fetchImpl });
     await assert.rejects(app.reply(messages), { status: 502 });
   }
@@ -190,7 +198,7 @@ test("the deadline also covers a stalled response body and non-cooperative provi
 
 test("partial, failed and cancelled provider responses are not presented as complete answers", async () => {
   for (const status of ["incomplete", "failed", "cancelled", "queued", "in_progress"]) {
-    const app = createAssistant({ apiKey: "test", getCatalog: async () => ({ services }),
+    const app = createAssistant({ mode: "openai", apiKey: "test", getCatalog: async () => ({ services }),
       fetchImpl: async () => new Response(JSON.stringify({ ...payload, status })) });
     await assert.rejects(app.reply(messages), { status: 502 });
   }
