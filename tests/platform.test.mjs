@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 import net from "node:net";
+import { contractDetailsFixture } from "./contract-fixture.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 let server,
@@ -31,6 +32,8 @@ async function request(
   if (origin && method !== "GET") h.Origin = base;
   if (as?.csrf && csrf) h["X-CSRF-Token"] = as.csrf;
   if (body && !(body instanceof Buffer)) {
+    if (path.endsWith("/quote") && body.contractDetails === undefined)
+      body = { ...body, contractDetails: structuredClone(contractDetailsFixture) };
     body = JSON.stringify(body);
     h["Content-Type"] = "application/json";
   }
@@ -533,6 +536,24 @@ test("orders, sessions and files survive server restart", async () => {
   assert.equal(r.data.status, "completed");
   assert.equal(r.data.payment.amount, 260000);
   assert.ok(r.data.files.length);
+  const attachment = r.data.files[0];
+  assert.deepEqual((await request(`/api/orders/${service.id}/files/${attachment.id}`, { as: alice })).data, pdf);
+  const originalUser = (await request("/api/session", { as: alice })).data.user;
+  assert.equal(originalUser.id, alice.user.id);
+  assert.equal(originalUser.email, "alice@example.test");
+  assert.equal((await request("/api/auth/logout", { as: alice, method: "POST", body: {} })).status, 200);
+  await stopServer();
+  await startServer();
+  assert.equal((await request("/api/session", { as: alice })).data.user, null);
+  const login = await request("/api/auth/login", { method: "POST", body: { email: "ALICE@EXAMPLE.TEST", password: secret } });
+  assert.equal(login.status, 200);
+  alice = { ...login.data, cookie: login.headers.get("set-cookie").split(";")[0] };
+  assert.deepEqual(alice.user, originalUser);
+  const orders = await request("/api/orders", { as: alice });
+  assert.ok(orders.data.some((order) => order.id === service.id));
+  assert.ok(orders.data.some((order) => order.id === productOrder.id));
+  assert.equal(orders.data.find((order) => order.id === service.id).payment.amount, 260000);
+  assert.deepEqual((await request(`/api/orders/${service.id}/files/${attachment.id}`, { as: alice })).data, pdf);
 });
 test("logout invalidates replayed session cookie", async () => {
   assert.equal(
@@ -615,6 +636,21 @@ test("OTP verification and login bind phone and account; approved codes are sing
       as: admin, method: "POST", body: { challengeId: challenge, code: "123456" },
     })).status, 404);
     assert.equal((await db.get("phone", challenge)).used, false);
+    const { digest } = await import("../lib/security.js");
+    const updateMany = db.updateMany;
+    db.updateMany = (updates, inserts) => updateMany(updates.map((update) => update.kind === "user"
+      ? { ...update, fn: () => { throw Object.assign(new Error("Injected account persistence failure"), { status: 503 }); } }
+      : update), inserts);
+    try {
+      const failed = await request("/api/auth/phone/check", {
+        as: alice, method: "POST", body: { challengeId: challenge, code: "123456" },
+      });
+      assert.equal(failed.status, 503);
+      assert.equal((await db.get("phone", challenge)).used, false);
+      assert.equal(await db.get("loginPhone", digest(phone)), null);
+      assert.equal(await db.get("verifiedPhone", digest(phone)), null);
+      assert.equal((await db.get("user", alice.user.id)).phoneVerified, false);
+    } finally { db.updateMany = updateMany; }
     r = await request("/api/auth/phone/check", {
       as: alice,
       method: "POST",
@@ -629,6 +665,8 @@ test("OTP verification and login bind phone and account; approved codes are sing
     assert.equal(r.status, 200);
     assert.equal(r.data.user.phone, phone);
     assert.equal(sentPhone, phone);
+    assert.equal((await db.get("loginPhone", digest(phone))).userId, alice.user.id);
+    assert.equal((await db.get("verifiedPhone", digest(phone))).userId, alice.user.id);
     r = await request("/api/auth/phone/check", {
       as: alice,
       method: "POST",

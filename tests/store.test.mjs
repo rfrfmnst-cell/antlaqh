@@ -26,6 +26,14 @@ test("related records and account updates roll back together on conflicts", asyn
     ]);
     assert.equal((await db.get("user", "existing")).loginPhone, "other");
     assert.equal((await db.get("loginPhone", "other")).userId, "existing");
+    await db.insert("phone", { id: "challenge", used: false }, "existing");
+    await assert.rejects(db.updateMany([
+      { kind: "phone", id: "challenge", fn: (challenge) => { challenge.used = true; return challenge; } },
+      { kind: "user", id: "existing", fn: () => { throw new Error("Account write failed"); } },
+    ], [{ kind: "verifiedPhone", item: { id: "new-phone", userId: "existing" }, owner: "existing" }]));
+    assert.equal((await db.get("phone", "challenge")).used, false);
+    assert.equal(await db.get("verifiedPhone", "new-phone"), null);
+    assert.equal((await db.get("user", "existing")).name, "Original");
   } finally {
     await db.close();
     assert.ok(resolve(dir).startsWith(resolve(tmpdir()) + sep));
