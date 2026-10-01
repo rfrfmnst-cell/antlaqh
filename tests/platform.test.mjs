@@ -69,6 +69,7 @@ async function startServer(sms = false) {
     APP_URL: base,
     DB_DRIVER: "sqlite",
     OPENAI_API_KEY: "",
+    ASSISTANT_MODE: "guided",
     DATA_DIR: dir,
     BOOTSTRAP_ADMIN_EMAIL: "admin@example.test",
     BOOTSTRAP_ADMIN_PASSWORD: secret,
@@ -705,7 +706,8 @@ test("service catalog exposes 15 services including ready websites and no assist
   const r = await request("/api/config");
   assert.equal(r.status, 200);
   assert.equal(r.data.services.length, 15);
-  assert.equal(r.data.assistantReady, false);
+  assert.equal(r.data.assistantReady, true);
+  assert.equal(r.data.assistantMode, "guided");
   const ids = r.data.services.map((s) => s.id);
   for (const id of [
     "website",
@@ -726,7 +728,7 @@ test("service catalog exposes 15 services including ready websites and no assist
     assert.ok(ids.includes(id));
   assert.equal(r.data.OPENAI_API_KEY, undefined);
 });
-test("public assistant enforces origin and validation and reports missing key honestly", async () => {
+test("public guided assistant enforces origin and validation and works without a key", async () => {
   assert.equal(
     (
       await request("/api/assistant", {
@@ -746,15 +748,13 @@ test("public assistant enforces origin and validation and reports missing key ho
     ).status,
     400,
   );
-  assert.equal(
-    (
-      await request("/api/assistant", {
-        method: "POST",
-        body: { messages: [{ role: "user", content: "ما الخدمات المتاحة؟" }] },
-      })
-    ).status,
-    503,
-  );
+  const guided = await request("/api/assistant", {
+    method: "POST", body: { messages: [{ role: "user", content: "ما الخدمات المتاحة؟" }] },
+  });
+  assert.equal(guided.status, 200);
+  assert.equal(guided.data.mode, "guided");
+  assert.equal(typeof guided.data.reply, "string");
+  assert.ok(guided.data.links.some((link) => link.href === "#/services"));
 });
 test("product artwork is an admin-only safe catalog choice", async () => {
   const changed = await request("/api/admin/products/" + product.id, {

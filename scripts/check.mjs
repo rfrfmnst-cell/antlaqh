@@ -6,6 +6,7 @@ for (const file of [
   "lib/store.js",
   "lib/catalog.js",
   "lib/assistant.js",
+  "lib/guided-assistant.js",
   "public/assistant.js",
   "lib/security.js",
   "lib/promotion.js",

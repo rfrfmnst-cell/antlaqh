@@ -2,7 +2,25 @@ const spark =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3Z"/></svg>';
 const host = document.createElement("div");
 host.className = "ai-widget";
-host.innerHTML = `<button class="ai-launcher" type="button" aria-label="فتح مساعد إنطلاقة" aria-haspopup="dialog" aria-expanded="false">${spark}<span>مساعد إنطلاقة</span></button><dialog class="ai-panel" aria-labelledby="ai-title"><header class="ai-header"><div class="ai-avatar">${spark}</div><div><h2 id="ai-title">مساعد إنطلاقة</h2><p>خطوتك القادمة، تبدأ بسؤال.</p></div><button class="ai-close" type="button" aria-label="إغلاق المساعد">×</button></header><div class="ai-status" role="status">جارٍ التحقق من توفر المساعد…</div><div class="ai-conversation" role="log" aria-live="polite" aria-label="المحادثة"><div class="ai-intro"><span class="ai-kicker">مساحة لفكرتك</span><h3>كيف نساعد مشروعك<br>على الانطلاق؟</h3><p>اكتشف الخدمة المناسبة ورتّب أفكارك ومتطلبات مشروعك.</p><div class="ai-suggestions"><button type="button" data-ai-prompt="أريد إنشاء متجر إلكتروني. ما المعلومات التي أجهزها للبدء؟">أريد إطلاق متجر <span>↗</span></button><button type="button" data-ai-prompt="كيف يمكن توظيف الذكاء الاصطناعي في مشروعي؟">أوظّف الذكاء الاصطناعي <span>↗</span></button><button type="button" data-ai-prompt="أريد البدء في البيع على نون أو أمازون. ما الخطوة الأولى؟">أبدأ على نون أو أمازون <span>↗</span></button></div></div></div><div class="ai-error" role="alert" hidden><span></span><button type="button" class="ai-retry" hidden>إعادة المحاولة</button></div><form class="ai-form"><label class="sr-only" for="ai-message">رسالتك لمساعد إنطلاقة</label><textarea id="ai-message" placeholder="حدّثنا عن فكرتك…" rows="2" maxlength="3000" required disabled></textarea><button class="ai-send" type="submit" aria-label="إرسال الرسالة" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 19 0-14m-6 6 6-6 6 6"/></svg></button></form><div class="ai-privacy">تُرسل رسائلك إلى OpenAI لإنتاج الرد. لا ترسل كلمات المرور أو بيانات الدفع. قد يخطئ المساعد.</div><footer class="ai-footer"><a href="#/services" data-ai-link>خدماتنا</a><a href="#/support" data-ai-link>تواصل مع الفريق</a><button class="ai-clear" type="button">محادثة جديدة</button></footer></dialog>`;
+host.innerHTML = `<button class="ai-launcher" type="button" aria-label="فتح مساعد انطلاقة" aria-haspopup="dialog" aria-expanded="false" aria-controls="ai-panel">${spark}<span>مساعد انطلاقة</span></button>
+<dialog id="ai-panel" class="ai-panel" aria-labelledby="ai-title" aria-describedby="ai-description">
+  <header class="ai-header"><div class="ai-avatar">${spark}</div><div><h2 id="ai-title">مساعد انطلاقة</h2><p id="ai-description">يساعدك على اختيار الخدمة من معلومات انطلاقة.</p></div><button class="ai-close" type="button" aria-label="إغلاق المساعد">×</button></header>
+  <div class="ai-status" role="status">جارٍ التحقق من توفر المساعد…</div>
+  <div class="ai-conversation" role="log" aria-live="polite" aria-relevant="additions" aria-label="المحادثة">
+    <div class="ai-intro"><span class="ai-kicker">إرشاد مجاني لبدايتك</span><h3>ما الخطوة المناسبة<br>لمشروعك؟</h3><p>مرحبًا، أنا مساعد انطلاقة. أساعدك في التعرف على خدماتنا وأسعار البداية وعرض الإطلاق ورحلة الطلب. اختر سؤالًا أو اكتب احتياجك.</p>
+      <div class="ai-suggestions">
+        <button type="button" data-ai-prompt="أريد موقعًا جاهزًا. ما الخيارات وأسعار البداية؟" disabled>أختار موقعًا جاهزًا <span aria-hidden="true">↗</span></button>
+        <button type="button" data-ai-prompt="أريد إنشاء متجر إلكتروني. ما الخدمة والسعر وما الذي يشمله؟" disabled>أبدأ متجرًا إلكترونيًا <span aria-hidden="true">↗</span></button>
+        <button type="button" data-ai-prompt="ما عرض الإطلاق وكيف أستخدم كود الخصم؟" disabled>أتعرف على عرض الإطلاق <span aria-hidden="true">↗</span></button>
+        <button type="button" data-ai-prompt="كيف تبدأ رحلة الطلب وعرض السعر والعقد والدفع؟" disabled>أفهم رحلة الطلب والدفع <span aria-hidden="true">↗</span></button>
+      </div>
+    </div>
+  </div>
+  <div class="ai-error" role="alert" hidden><span></span><button type="button" class="ai-retry" hidden>إعادة المحاولة</button></div>
+  <form class="ai-form"><label class="sr-only" for="ai-message">رسالتك لمساعد انطلاقة</label><textarea id="ai-message" placeholder="مثال: أحتاج موقعًا لمقهى…" rows="2" maxlength="3000" aria-describedby="ai-privacy" required disabled></textarea><button class="ai-send" type="submit" aria-label="إرسال الرسالة" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 19 0-14m-6 6 6-6 6 6"/></svg></button></form>
+  <div id="ai-privacy" class="ai-privacy">لا يصل المساعد إلى حسابك أو ملفاتك. تبقى المحادثة في هذه الصفحة حتى تمسحها أو تحدّث الصفحة. لا ترسل كلمات المرور أو بيانات الدفع.</div>
+  <footer class="ai-footer"><a href="#/services" data-ai-link>خدماتنا</a><a href="#/start" data-ai-link>ابدأ طلبًا</a><button class="ai-clear" type="button" aria-label="مسح المحادثة وبدء محادثة جديدة">محادثة جديدة</button></footer>
+</dialog>`;
 document.body.append(host);
 const dialog = host.querySelector("dialog");
 const launcher = host.querySelector(".ai-launcher");
@@ -14,22 +32,51 @@ const errorBox = host.querySelector(".ai-error");
 const retry = host.querySelector(".ai-retry");
 const status = host.querySelector(".ai-status");
 let ready = false,
+  serviceIds = new Set(),
   busy = false,
   history = [],
   failedMessages = null,
   controller = null,
   availabilityController = null,
+  openingGeneration = 0,
   previousFocus = null;
 
-function appendMessage(role, content) {
+function allowedLink(href) {
+  if (typeof href !== "string") return false;
+  if (["#/services", "#/ready-websites", "#/launch-offer", "#/start", "#/support", "#/terms", "#/dashboard", "/demos/business/", "/demos/portfolio/", "/demos/restaurant/"].includes(href)) return true;
+  const service = href.match(/^#\/service\/([a-z0-9-]+)$/);
+  const start = href.match(/^#\/start\?service=([a-z0-9-]+)$/);
+  return Boolean((service || start) && serviceIds.has((service || start)[1]));
+}
+function appendMessage(role, content, links = []) {
   const bubble = document.createElement("div");
   bubble.className = `ai-message ai-${role}`;
   const label = document.createElement("span");
   label.className = "ai-message-label";
-  label.textContent = role === "user" ? "أنت" : "إنطلاقة · ذكاء اصطناعي";
+  label.textContent = role === "user" ? "أنت" : "مساعد انطلاقة";
   const text = document.createElement("p");
   text.textContent = content;
   bubble.append(label, text);
+  if (role === "assistant" && Array.isArray(links)) {
+    const actions = document.createElement("div");
+    actions.className = "ai-message-links";
+    const seen = new Set();
+    for (const link of links.slice(0, 6)) {
+      if (!link || typeof link.label !== "string" || !link.label.trim() || !allowedLink(link.href) || seen.has(link.href)) continue;
+      seen.add(link.href);
+      const anchor = document.createElement("a");
+      anchor.textContent = link.label.slice(0, 120);
+      anchor.setAttribute("href", link.href);
+      if (link.href.startsWith("/demos/")) {
+        anchor.setAttribute("target", "_blank");
+        anchor.setAttribute("rel", "noopener noreferrer");
+        anchor.setAttribute("aria-label", `${link.label.slice(0, 120)} (يفتح في علامة تبويب جديدة)`);
+      }
+      anchor.addEventListener("click", close);
+      actions.append(anchor);
+    }
+    if (actions.children.length) bubble.append(actions);
+  }
   conversation.append(bubble);
   conversation.scrollTop = conversation.scrollHeight;
 }
@@ -61,13 +108,20 @@ async function checkAvailability() {
     const config = await response.json();
     if (availabilityController !== currentController) return;
     ready = config.assistantReady === true;
+    serviceIds = new Set(Array.isArray(config.services) ? config.services.map(service => service?.id).filter(id => typeof id === "string") : []);
+    const privacy = host.querySelector(".ai-privacy");
+    if (privacy) privacy.textContent = config.assistantMode === "openai"
+      ? "تستخدم المحادثة خدمة مساعدة خارجية. لا يصل المساعد إلى حسابك أو ملفاتك. لا ترسل كلمات المرور أو بيانات الدفع. راجع التفاصيل في سياسة الخصوصية."
+      : "لا يصل المساعد إلى حسابك أو ملفاتك. تبقى المحادثة في هذه الصفحة حتى تمسحها أو تحدّث الصفحة. لا ترسل كلمات المرور أو بيانات الدفع.";
     status.textContent = ready
-      ? "مساعد ذكي لاكتشاف الخدمات وتوضيح الخطوة التالية"
-      : "الردود الذكية غير مفعّلة حاليًا. تصفّح خدماتنا أو تواصل مع الفريق.";
+      ? config.assistantMode === "guided"
+        ? "الإرشاد المجاني متاح الآن من معلومات خدمات انطلاقة."
+        : "المساعد متاح لاكتشاف الخدمات وتوضيح الخطوة التالية."
+      : "المساعد غير متاح حاليًا. تصفّح خدماتنا أو تواصل مع الفريق.";
   } catch {
     if (availabilityController !== currentController) return;
     ready = false;
-    status.textContent = "تعذر الاتصال. يمكنك التواصل مع فريق إنطلاقة.";
+    status.textContent = "تعذر الاتصال. يمكنك التواصل مع فريق انطلاقة.";
   } finally {
     clearTimeout(timer);
     if (availabilityController === currentController) {
@@ -83,17 +137,22 @@ function showError(message, canRetry = false) {
   retry.hidden = !canRetry;
 }
 function close() {
+  openingGeneration++;
   dialog.close();
   launcher.setAttribute("aria-expanded", "false");
   if (previousFocus?.isConnected) previousFocus.focus();
 }
 async function open() {
-  previousFocus = document.activeElement;
-  if (!dialog.open) dialog.showModal();
+  const generation = ++openingGeneration;
+  if (!dialog.open) {
+    previousFocus = document.activeElement;
+    dialog.showModal();
+  }
   launcher.setAttribute("aria-expanded", "true");
   host.querySelector(".ai-close").focus();
   await checkAvailability();
-  if (ready && !busy && dialog.open) input.focus();
+  if (generation === openingGeneration && ready && !busy && dialog.open) input.focus();
+  return generation;
 }
 async function request(messages) {
   busy = true;
@@ -127,7 +186,7 @@ async function request(messages) {
     if (!response.ok) {
       if (response.status === 503) {
         ready = false;
-        status.textContent = "الردود الذكية غير مفعّلة حاليًا. تصفّح خدماتنا أو تواصل مع الفريق.";
+        status.textContent = "المساعد غير متاح مؤقتًا. تصفّح خدماتنا أو تواصل مع الفريق.";
         status.classList.remove("ai-available");
       }
       throw Error(typeof result?.error === "string" ? result.error : "تعذر الحصول على الرد.");
@@ -135,7 +194,7 @@ async function request(messages) {
     if (typeof result?.reply !== "string" || !result.reply.trim())
       throw Error("لم يصل رد مكتمل. أعد المحاولة.");
     if (controller !== currentController) return;
-    appendMessage("assistant", result.reply);
+    appendMessage("assistant", result.reply, result.links);
     history = [
       ...messages,
       { role: "assistant", content: result.reply.slice(0, 3000) },
@@ -192,10 +251,13 @@ document.addEventListener("click", (event) => {
   if (trigger) {
     event.preventDefault();
     const draft = trigger.hasAttribute("data-assistant-draft") ? document.getElementById("home-ai-draft")?.value || "" : trigger.dataset.assistantPrompt || "";
-    open().then(() => {
-      if (!dialog.open || busy) return;
+    return open().then((generation) => {
+      if (generation !== openingGeneration || !dialog.open || busy) return;
       if (draft) input.value = draft.slice(0, 3000);
-      if (ready) input.focus();
+      if (ready) {
+        input.focus();
+        if (draft.trim()) host.querySelector(".ai-form").requestSubmit();
+      }
     });
   }
 });
@@ -217,13 +279,12 @@ dialog.addEventListener("click", (event) => {
       close();
   }
 });
-host.querySelectorAll("[data-ai-prompt]").forEach((button) =>
-  button.addEventListener("click", () => {
-    if (!ready || busy) return;
-    input.value = button.dataset.aiPrompt;
-    input.focus();
-  }),
-);
+conversation.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-ai-prompt]");
+  if (!button || !ready || busy) return;
+  input.value = button.dataset.aiPrompt;
+  host.querySelector(".ai-form").requestSubmit();
+});
 host
   .querySelectorAll("[data-ai-link]")
   .forEach((link) => link.addEventListener("click", close));
@@ -231,6 +292,7 @@ retry.addEventListener("click", () => {
   if (failedMessages && ready && !busy) request(failedMessages);
 });
 host.querySelector(".ai-clear").addEventListener("click", () => {
+  openingGeneration++;
   const pending = controller;
   controller = null;
   pending?.abort();
@@ -239,13 +301,6 @@ host.querySelector(".ai-clear").addEventListener("click", () => {
   failedMessages = null;
   errorBox.hidden = true;
   conversation.innerHTML = initialContent;
-  conversation.querySelectorAll("[data-ai-prompt]").forEach((button) =>
-    button.addEventListener("click", () => {
-      if (!ready || busy) return;
-      input.value = button.dataset.aiPrompt;
-      input.focus();
-    }),
-  );
   input.value = "";
   updateControls();
   if (ready) input.focus();

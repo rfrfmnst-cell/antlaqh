@@ -26,6 +26,9 @@ import {
 } from "./lib/security.js";
 
 const root = resolve(fileURLToPath(new URL(".", import.meta.url)));
+const { version: appVersion } = JSON.parse(
+  await readFile(new URL("./package.json", import.meta.url), "utf8"),
+);
 const production = process.env.NODE_ENV === "production";
 const port = Number(process.env.PORT || 3000);
 const origin = new URL(process.env.APP_URL || `http://localhost:${port}`)
@@ -71,6 +74,11 @@ const now = () => new Date().toISOString();
 const assistant = createAssistant({
   getCatalog: async () => ({
     services,
+    customerJourney,
+    contact: {
+      email: process.env.BUSINESS_EMAIL || "antlaqh2030@gmail.com",
+      phone: process.env.BUSINESS_PHONE || "+966553575760",
+    },
     launchOffer: getLaunchOffer(),
     products: (await db.list("product"))
       .filter((p) => p.published && p.file)
@@ -337,7 +345,7 @@ async function api(req, res, url) {
   if (method === "GET" && path === "/api/health")
     return json(res, 200, {
       status: "ok",
-      version: "5.0.0",
+      version: appVersion,
       ...(url.searchParams.has("verify-origin")
         ? {
             siteOrigin: origin,
@@ -360,6 +368,7 @@ async function api(req, res, url) {
       channels: { whatsapp: { phone: businessWhatsapp, direct: true, automated: false } },
       smsReady,
       assistantReady: assistant.ready,
+      assistantMode: assistant.mode,
       businessEmail: process.env.BUSINESS_EMAIL || "antlaqh2030@gmail.com",
       businessPhone: process.env.BUSINESS_PHONE || "+966553575760",
       payments: "bank_transfer",
