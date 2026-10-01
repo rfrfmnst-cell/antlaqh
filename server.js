@@ -1,11 +1,12 @@
 import http from "node:http";
-import { services, coverKeys } from "./lib/catalog.js";
+import { services, coverKeys, customerJourney } from "./lib/catalog.js";
 import { createAssistant } from "./lib/assistant.js";
 import { isIP } from "node:net";
 import { readFile, writeFile, mkdir, unlink, stat } from "node:fs/promises";
 import { resolve, join, extname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createStore } from "./lib/store.js";
+import { getLaunchOffer, claimPromotion, priceBreakdown } from "./lib/promotion.js";
 import {
   id,
   digest,
@@ -29,6 +30,8 @@ const origin = new URL(process.env.APP_URL || `http://localhost:${port}`)
   .origin;
 const dataDir = resolve(process.env.DATA_DIR || join(root, "data"));
 const driver = process.env.DB_DRIVER || "sqlite";
+const ga4MeasurementId = /^G-[A-Z0-9]{5,20}$/.test(process.env.GOOGLE_ANALYTICS_ID || "")
+  ? process.env.GOOGLE_ANALYTICS_ID : null;
 if (
   production &&
   (driver !== "mysql" ||
@@ -63,6 +66,7 @@ const now = () => new Date().toISOString();
 const assistant = createAssistant({
   getCatalog: async () => ({
     services,
+    launchOffer: getLaunchOffer(),
     products: (await db.list("product"))
       .filter((p) => p.published && p.file)
       .slice(0, 30)
@@ -348,6 +352,9 @@ async function api(req, res, url) {
   if (method === "GET" && path === "/api/config")
     return json(res, 200, {
       services,
+      customerJourney,
+      launchOffer: getLaunchOffer(),
+      integrations: { ga4MeasurementId },
       smsReady,
       assistantReady: assistant.ready,
       businessEmail: process.env.BUSINESS_EMAIL || "antlaqh2030@gmail.com",
@@ -597,13 +604,18 @@ async function api(req, res, url) {
   if (method === "POST" && path === "/api/orders") {
     const b = await jsonBody(req);
     rate(`order:${auth.u.id}`, 15);
+    const createdAt = now();
+    const promotion = claimPromotion(b.promoCode, Date.parse(createdAt));
     const o = {
       id: id(),
       number: `INT-${Date.now().toString(36).toUpperCase()}-${id().slice(0, 4).toUpperCase()}`,
       owner: auth.u.id,
       customer: { name: auth.u.name, email: auth.u.email },
-      createdAt: now(),
+      createdAt,
       updatedAt: now(),
+      promotion,
+      subtotal: null,
+      discount: 0,
       events: [],
       messages: [],
       files: [],
@@ -621,7 +633,7 @@ async function api(req, res, url) {
       o.title = p.title;
       o.productId = p.id;
       o.productFile = p.file;
-      o.amount = p.amount;
+      Object.assign(o, priceBreakdown(p.amount, promotion));
       o.description = p.description;
       o.status = "awaiting_payment";
       o.termsAcceptedAt = now();
@@ -631,6 +643,18 @@ async function api(req, res, url) {
       o.type = "service";
       o.service = service.id;
       o.advertisedPrice = { ...service.pricing };
+      if (service.id === "ready-website") {
+        const template = service.templates.find(t => t.id === b.template);
+        if (!template) throw fail(400, "اختر نموذج الموقع الجاهز.");
+        if (b.addons !== undefined && (!Array.isArray(b.addons) || b.addons.length > service.addons.length))
+          throw fail(400, "اختر إضافات الموقع من القائمة.");
+        const selected = b.addons || [];
+        if (selected.some(value => typeof value !== "string" || !service.addons.some(a => a.id === value)) || new Set(selected).size !== selected.length)
+          throw fail(400, "إضافات الموقع غير صحيحة.");
+        o.siteOptions = { template: { ...template }, addons: service.addons.filter(a => selected.includes(a.id)).map(a => ({ ...a })) };
+      } else if (b.addons?.length || b.template) {
+        throw fail(400, "إضافات المواقع الجاهزة متاحة لهذا المنتج فقط.");
+      }
       o.title = text(b.title, 3, 160);
       o.description = text(b.description, 15, 8000);
       o.budget = text(b.budget || "", 0, 100);
@@ -724,7 +748,7 @@ async function api(req, res, url) {
         id: id(),
         version: o.contracts.length + 1,
         agreement: text(b.agreement, 10, 10000),
-        amount: amount(b.amount),
+        subtotal: amount(b.amount),
         deliveryDate: text(b.deliveryDate, 10, 10),
         terms: text(b.terms, 10, 10000),
         parties: {
@@ -748,14 +772,19 @@ async function api(req, res, url) {
           throw fail(409, "لا يمكن إصدار عرض لطلب مُلغى أو بدأ تنفيذه.");
         if (x.payment?.confirmed && !x.payment.revoked)
           throw fail(409, "لا يمكن تعديل عرض مدفوع.");
+        Object.assign(q, priceBreakdown(q.subtotal, x.promotion));
+        q.promotion = x.promotion || null;
         q.version = x.contracts.length + 1;
         q.fingerprint = digest(JSON.stringify({
           id: q.id, version: q.version, agreement: q.agreement,
-          amount: q.amount, deliveryDate: q.deliveryDate, terms: q.terms,
+          subtotal: q.subtotal, discount: q.discount, amount: q.amount,
+          promotion: q.promotion, deliveryDate: q.deliveryDate, terms: q.terms,
           parties: q.parties, currency: q.currency,
         }));
         x.contracts.push(q);
         x.currentContract = q.id;
+        x.subtotal = q.subtotal;
+        x.discount = q.discount;
         x.amount = q.amount;
         x.status = "quoted";
         event(x, `صدر عرض السعر والعقد، الإصدار ${q.version}`, auth.u);
@@ -799,6 +828,9 @@ async function api(req, res, url) {
         x.payment = {
           confirmed: true,
           reference,
+          subtotal: x.subtotal ?? x.amount,
+          discount: x.discount || 0,
+          promotion: x.promotion || null,
           amount: x.amount,
           currency: "SAR",
           at: now(),
@@ -1006,6 +1038,8 @@ const types = {
   ".svg": "image/svg+xml",
   ".ico": "image/x-icon",
   ".webmanifest": "application/manifest+json",
+  ".txt": "text/plain; charset=utf-8",
+  ".xml": "application/xml; charset=utf-8",
 };
 const server = http.createServer(async (req, res) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
@@ -1017,7 +1051,7 @@ const server = http.createServer(async (req, res) => {
   );
   res.setHeader(
     "Content-Security-Policy",
-    "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+    `default-src 'self'; script-src 'self'${ga4MeasurementId ? " https://www.googletagmanager.com" : ""}; style-src 'self'; img-src 'self' data:${ga4MeasurementId ? " https://www.google-analytics.com https://region1.google-analytics.com" : ""}; connect-src 'self'${ga4MeasurementId ? " https://www.google-analytics.com https://region1.google-analytics.com https://www.googletagmanager.com" : ""}; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'`,
   );
   if (production)
     res.setHeader("Strict-Transport-Security", "max-age=31536000");
@@ -1041,7 +1075,7 @@ const server = http.createServer(async (req, res) => {
     const file = resolve(
       root,
       "public",
-      pathname === "/" ? "index.html" : "." + pathname,
+      pathname === "/" ? "index.html" : "." + (pathname.endsWith("/") ? pathname + "index.html" : pathname),
     );
     if (!file.startsWith(join(root, "public") + sep))
       throw fail(404, "الصفحة غير موجودة.");
