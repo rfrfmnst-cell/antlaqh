@@ -8,6 +8,8 @@ for (const file of [
   "lib/assistant.js",
   "public/assistant.js",
   "lib/security.js",
+  "lib/promotion.js",
+  "public/integrations.js",
   "public/app.js",
 ]) {
   const r = spawnSync(process.execPath, ["--check", file], {
@@ -27,7 +29,7 @@ for (const file of [
   if (!existsSync(file)) throw Error(`Missing ${file}`);
 const { services } = await import("../lib/catalog.js");
 for (const service of services)
-  if (!existsSync("public/assets/catalog-" + service.id + ".webp"))
+  if (!existsSync("public/assets/catalog-" + (service.artwork || service.id) + ".webp"))
     throw Error("Missing artwork: " + service.id);
 const html = readFileSync("public/index.html", "utf8");
 if (!html.includes('dir="rtl"')) throw Error("RTL document is required");

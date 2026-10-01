@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
+import { services, customerJourney } from "../lib/catalog.js";
 
 const source = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
 const user = { id: "customer", role: "customer", name: "عميل الاختبار" };
@@ -16,7 +17,34 @@ const response = (data, status = 200) => ({
   json: async () => data,
 });
 
-async function app({ hash = "#/", session = {}, fetch: request } = {}) {
+test("ready websites expose real previews and preserve template and promotion through login", async () => {
+  const start = new Date(Date.now()-1000).toISOString(), end = new Date(Date.now()+86400000).toISOString();
+  const settings = { ...config,services,customerJourney,launchOffer:{code:"ANTLAQH20",ratePercent:20,active:true,startsAt:start,endsAt:end,terms:[]} };
+  const ui = await app({hash:"#/ready-websites",settings});
+  assert.match(ui.nodes.get("#main").innerHTML,/\/demos\/business\//);
+  assert.match(ui.nodes.get("#main").innerHTML,/template=portfolio&promo=ANTLAQH20/);
+  assert.match(ui.nodes.get("#footer").innerHTML,/التحويل البنكي هو وسيلة الدفع الوحيدة/);
+  ui.location.hash="#/start?service=ready-website&template=portfolio&promo=ANTLAQH20";
+  await ui.render();
+  assert.match(ui.nodes.get("#main").innerHTML,/template%3Dportfolio/);
+  assert.match(ui.nodes.get("#main").innerHTML,/promo%3DANTLAQH20/);
+  ui.state.user=user;
+  await ui.render();
+  assert.match(ui.nodes.get("#main").innerHTML,/value="portfolio" selected/);
+  assert.match(ui.nodes.get("#main").innerHTML,/name="addon_hosting"/);
+  assert.match(ui.nodes.get("#main").innerHTML,/name="promoCode"[^>]*value="ANTLAQH20"/);
+});
+test("an expired launch offer is no longer advertised but a saved quote shows its original discount", async () => {
+  const ui = await app({settings:{...config,services,customerJourney,launchOffer:{code:"ANTLAQH20",ratePercent:20,active:true,startsAt:"2026-01-01T00:00:00Z",endsAt:"2026-02-01T00:00:00Z",terms:[]}}});
+  assert.equal(ui.launchBanner(),"");
+  assert.doesNotMatch(ui.nodes.get("#main").innerHTML,/بالكود/);
+  const saved=ui.priceSummary({subtotal:99000,discount:19800,amount:79200,promotion:{code:"ANTLAQH20",ratePercent:20}});
+  assert.match(saved,/السعر قبل الخصم/);
+  assert.match(saved,/خصم 20%/);
+  assert.match(saved,/الإجمالي النهائي/);
+});
+
+async function app({ hash = "#/", session = {}, fetch: request, settings = config } = {}) {
   const listeners = new Map();
   function element() {
     const classes = new Set();
@@ -65,13 +93,13 @@ async function app({ hash = "#/", session = {}, fetch: request } = {}) {
         const result = await request(path, options);
         if (result) return result;
       }
-      if (path === "/api/config") return response(config);
+      if (path === "/api/config") return response(settings);
       if (path === "/api/session") return response(session);
       if (path === "/api/orders") return response([]);
       throw new Error("Unexpected request: " + path);
     },
   });
-  const runtime = await new vm.Script(`(async () => { ${source}\nreturn { state, render, api, go, header, paymentCard, serviceDetail }; })()`).runInContext(context);
+  const runtime = await new vm.Script(`(async () => { ${source}\nreturn { state, render, api, go, header, paymentCard, serviceDetail, priceSummary, launchBanner, readyWebsites, start }; })()`).runInContext(context);
   return {
     ...runtime, nodes, location, requests, document,
     async event(name, event) {

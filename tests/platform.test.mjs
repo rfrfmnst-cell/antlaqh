@@ -663,10 +663,10 @@ test("OTP verification and login bind phone and account; approved codes are sing
   }
 });
 
-test("service catalog exposes 14 requested services and no assistant credentials", async () => {
+test("service catalog exposes 15 services including ready websites and no assistant credentials", async () => {
   const r = await request("/api/config");
   assert.equal(r.status, 200);
-  assert.equal(r.data.services.length, 14);
+  assert.equal(r.data.services.length, 15);
   assert.equal(r.data.assistantReady, false);
   const ids = r.data.services.map((s) => s.id);
   for (const id of [
@@ -858,4 +858,3 @@ test("concurrent password changes cannot both authenticate with the old password
     assert.deepEqual(results.map((r) => r.status).sort(), [200, 409]);
   } finally { db.update = update; release(); }
 });
-
