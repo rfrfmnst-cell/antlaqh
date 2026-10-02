@@ -329,6 +329,7 @@ async function api(req, res, url) {
   const auth = await session(req);
   const publicWrite = [
     "/api/assistant",
+    "/api/auth/guest",
     "/api/auth/register",
     "/api/auth/login",
     "/api/auth/otp/send",
@@ -399,6 +400,24 @@ async function api(req, res, url) {
     rate(`recovery-reset:${ip}`, 12);
     const result = await recovery.reset(await jsonBody(req));
     return json(res, 200, result);
+  }
+  if (method === "POST" && path === "/api/auth/guest") {
+    rate(`guest:${ip}`, 12);
+    const b = await jsonBody(req);
+    const guestId = id();
+    const u = {
+      id: guestId,
+      name: text(b.name, 2, 100),
+      email: email(b.email),
+      role: "customer",
+      guest: true,
+      phoneVerified: false,
+      createdAt: now(),
+    };
+    if (b.phone) u.phone = normalizePhone(b.phone);
+    const result = await login(res, u);
+    await db.insert("user", u, guestId);
+    return json(res, 201, result);
   }
   if (method === "POST" && path === "/api/auth/register") {
     rate(`register:${ip}`, 8);
@@ -813,6 +832,8 @@ async function api(req, res, url) {
           contact: providerDetails,
           customer: x.customer,
           siteOptions: x.siteOptions,
+          serviceDetails: services.find((service) => service.id === x.service) || null,
+          requestDetails: { title: x.title, description: x.description, budget: x.budget || "", targetDate: x.targetDate || "" },
         });
         q.version = x.contracts.length + 1;
         q.fingerprint = digest(JSON.stringify({
