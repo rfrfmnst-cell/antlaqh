@@ -754,6 +754,21 @@ async function adminSettings(path) {
   );
 }
 
+async function adminContracts(path) {
+  const orders = (await api("/api/orders?all=1")).filter((o) => o.currentContract);
+  return workspace(
+    path,
+    `${pageHead("العقود", "العقود الحالية وحالة موافقة كل عميل.")}${orders.length ? `<div class="table-wrap"><table><thead><tr><th>الطلب</th><th>العميل</th><th>الإصدار</th><th>القيمة</th><th>الموافقة</th><th></th></tr></thead><tbody>${orders.map((o) => { const q = o.contracts.find((x) => x.id === o.currentContract); return `<tr><td><strong>${E(o.title)}</strong><div class="small muted" dir="ltr">${E(o.number)}</div></td><td>${E(o.customer.name)}</td><td>${q ? q.version : "—"}</td><td>${money(o.amount || 0)}</td><td>${q?.acceptedAt ? "تمت " + date(q.acceptedAt) : "بانتظار العميل"}</td><td><a class="text-link" href="#/order/${o.id}">فتح الطلب</a></td></tr>`; }).join("")}</tbody></table></div>` : empty("لا توجد عقود بعد", "ستظهر العقود بمجرد تجهيزها للطلبات.")}`,
+  );
+}
+async function adminPayments(path) {
+  const orders = (await api("/api/orders?all=1")).filter((o) => o.amount);
+  return workspace(
+    path,
+    `${pageHead("المدفوعات", "متابعة المبالغ المستحقة والمؤكدة وإيصالات التحويل.")}${orders.length ? `<div class="table-wrap"><table><thead><tr><th>الطلب</th><th>العميل</th><th>المبلغ</th><th>الحالة</th><th>الإيصال</th><th></th></tr></thead><tbody>${orders.map((o) => `<tr><td><strong>${E(o.title)}</strong><div class="small muted" dir="ltr">${E(o.number)}</div></td><td>${E(o.customer.name)}</td><td>${money(o.amount)}</td><td>${o.payment?.confirmed && !o.payment.revoked ? "مؤكد" : o.payment?.revoked ? "ملغي" : o.status === "awaiting_payment" ? "بانتظار التحويل" : "لم يصل لمرحلة الدفع"}</td><td>${o.files?.some((f) => f.purpose === "payment_receipt") ? "مرفق" : "—"}</td><td><a class="text-link" href="#/order/${o.id}">فتح</a></td></tr>`).join("")}</tbody></table></div>` : empty("لا توجد مدفوعات بعد", "ستظهر هنا الطلبات التي لها قيمة مالية.")}`,
+  );
+}
+
 async function adminProducts(path) {
   const products = await api("/api/admin/products");
   return workspace(
