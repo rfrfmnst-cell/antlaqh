@@ -538,7 +538,9 @@ async function dashboard(path) {
   const tiles = admin
     ? [
         [summary.active, "طلبات نشطة"],
-        [summary.customers, "عميل مسجّل"],
+        [summary.contracts, "عقود صادرة"],
+        [summary.awaitingPayment, "بانتظار الدفع"],
+        [summary.customers, "عملاء"],
         [money(summary.revenue), "مبالغ مؤكدة"],
         [summary.openTickets, "تذاكر مفتوحة"],
       ]
@@ -550,7 +552,7 @@ async function dashboard(path) {
       ];
   return workspace(
     path,
-    `${pageHead(admin ? "لوحة إدارة انطلاقة" : `أهلًا، ${E(state.user.name.split(" ")[0])}`, "متابعة واضحة لكل ما يحتاج انتباهك.", link(admin ? "/admin/products" : "/start", admin ? "إدارة المنتجات" : "مشروع جديد"))}<div class="stats">${tiles.map(([v, l], i) => `<div class="stat ${i === 0 ? "featured" : ""}"><span class="value">${v}</span><span class="label">${l}</span></div>`).join("")}</div><div class="section-head"><h2>أحدث الطلبات</h2><a class="text-link" href="#${admin ? "/admin/orders" : "/orders"}">عرض جميع الطلبات</a></div>${ordersTable(orders.slice(0, 6), admin)}${!admin ? journey() : ""}${!admin ? `<div class="banner"><div><h2>للفكرة التالية مساحة.</h2><p>اكتشف الخدمات التي تدعم خطوتك القادمة.</p></div>${link("/services", "تصفّح الخدمات", "lime")}</div>` : ""}`,
+    `${pageHead(admin ? "لوحة إدارة انطلاقة" : `أهلًا، ${E(state.user.name.split(" ")[0])}`, "متابعة واضحة لكل ما يحتاج انتباهك.", link(admin ? "/admin/orders" : "/start", admin ? "فتح الطلبات" : "مشروع جديد"))}<div class="stats">${tiles.map(([v, l], i) => `<div class="stat ${i === 0 ? "featured" : ""}"><span class="value">${v}</span><span class="label">${l}</span></div>`).join("")}</div><div class="section-head"><h2>أحدث الطلبات</h2><a class="text-link" href="#${admin ? "/admin/orders" : "/orders"}">عرض جميع الطلبات</a></div>${ordersTable(orders.slice(0, 6), admin)}${!admin ? journey() : ""}${!admin ? `<div class="banner"><div><h2>للفكرة التالية مساحة.</h2><p>اكتشف الخدمات التي تدعم خطوتك القادمة.</p></div>${link("/services", "تصفّح الخدمات", "lime")}</div>` : ""}`,
   );
 }
 async function orderList(path) {
@@ -741,9 +743,10 @@ async function notifications(path) {
 }
 async function support(path) {
   const tickets = await api("/api/tickets");
+  const admin = state.user.role === "admin";
   return workspace(
     path,
-    `${pageHead(state.user.role === "admin" ? "تذاكر الدعم" : "الدعم والمساعدة", "محادثة خاصة لمتابعة سؤالك مع الفريق.")}<section class="panel contact-channel"><h2>قناة WhatsApp</h2><p>راسل فريق انطلاقة على الرقم 0553575760. يفتح الزر محادثة مباشرة؛ لا يرسل بيانات حسابك أو طلباتك تلقائيًا. لحفظ الملاحظات ضمن مشروعك، استخدم محادثة الطلب أو تذكرة الدعم.</p>${whatsappLink()}</section><div class="two-col"><section class="panel"><h2>التذاكر</h2>${tickets.length ? tickets.map((t) => `<details class="ticket"><summary><span class="ticket-head"><strong>${E(t.subject)}</strong><span class="badge ${t.status === "closed" ? "completed" : "received"}">${t.status === "closed" ? "مغلقة" : "مفتوحة"}</span></span><span class="small muted">${E(t.name)} · ${date(t.createdAt)}</span></summary><div class="spaced">${t.messages.map((m) => `<div class="message ${m.role === "admin" ? "admin" : ""}"><div class="message-meta"><strong>${E(m.by)}</strong><span>${date(m.at)}</span></div><p class="pre">${E(m.message)}</p></div>`).join("")}<form data-form="ticket-reply" data-id="${t.id}">${errors()}${textarea("message", "إضافة رد", 'required maxlength="5000"')}${state.user.role === "admin" ? `<div class="field"><label for="ticket-status-${t.id}">حالة التذكرة</label><select id="ticket-status-${t.id}" name="status"><option value="open" ${t.status === "open" ? "selected" : ""}>مفتوحة</option><option value="closed" ${t.status === "closed" ? "selected" : ""}>مغلقة</option></select></div>` : ""}<button class="btn" type="submit">إرسال الرد</button></form></div></details>`).join("") : '<p class="muted">لا توجد تذاكر حتى الآن.</p>'}</section><section class="panel"><h2>تذكرة جديدة</h2><form data-form="ticket">${errors()}${field("subject", "عنوان السؤال", "text", 'required minlength="3" maxlength="180"')}${textarea("message", "كيف يمكننا مساعدتك؟", 'required minlength="10" maxlength="5000"')}<button class="btn" type="submit">إرسال التذكرة</button></form></section></div>`,
+    `${pageHead(admin ? "الدعم والمحادثات" : "الدعم والمساعدة", admin ? "جميع تذاكر العملاء ومحادثات الدعم في مكان واحد." : "محادثة خاصة لمتابعة سؤالك مع الفريق.")}<section class="panel contact-channel"><h2>قناة WhatsApp</h2><p>راسل فريق انطلاقة على الرقم 0553575760. يفتح الزر محادثة مباشرة؛ لا يرسل بيانات حسابك أو طلباتك تلقائيًا. لحفظ الملاحظات ضمن مشروعك، استخدم محادثة الطلب أو تذكرة الدعم.</p>${whatsappLink()}</section><div class="two-col"><section class="panel"><h2>التذاكر</h2>${tickets.length ? tickets.map((t) => `<details class="ticket"><summary><span class="ticket-head"><strong>${E(t.subject)}</strong><span class="badge ${t.status === "closed" ? "completed" : "received"}">${t.status === "closed" ? "مغلقة" : "مفتوحة"}</span></span><span class="small muted">${E(t.name)} · ${date(t.createdAt)}</span></summary><div class="spaced">${t.messages.map((m) => `<div class="message ${m.role === "admin" ? "admin" : ""}"><div class="message-meta"><strong>${E(m.by)}</strong><span>${date(m.at)}</span></div><p class="pre">${E(m.message)}</p></div>`).join("")}<form data-form="ticket-reply" data-id="${t.id}">${errors()}${textarea("message", "إضافة رد", 'required maxlength="5000"')}${state.user.role === "admin" ? `<div class="field"><label for="ticket-status-${t.id}">حالة التذكرة</label><select id="ticket-status-${t.id}" name="status"><option value="open" ${t.status === "open" ? "selected" : ""}>مفتوحة</option><option value="closed" ${t.status === "closed" ? "selected" : ""}>مغلقة</option></select></div>` : ""}<button class="btn" type="submit">إرسال الرد</button></form></div></details>`).join("") : '<p class="muted">لا توجد تذاكر حتى الآن.</p>'}</section>${admin ? "" : `<section class="panel"><h2>تذكرة جديدة</h2><form data-form="ticket">${errors()}${field("subject", "عنوان السؤال", "text", 'required minlength="3" maxlength="180"')}${textarea("message", "كيف يمكننا مساعدتك؟", 'required minlength="10" maxlength="5000"')}<button class="btn" type="submit">إرسال التذكرة</button></form></section>`}</div>`,
   );
 }
 async function adminSettings(path) {
@@ -780,15 +783,15 @@ async function customers(path) {
   const users = await api("/api/admin/customers");
   return workspace(
     path,
-    `${pageHead("العملاء", "الحسابات المسجلة في المنصة.")}<div class="table-wrap"><table><thead><tr><th>الاسم</th><th>البريد</th><th>الجوال</th><th>تاريخ التسجيل</th></tr></thead><tbody>${
+    `${pageHead("العملاء", "عملاء الطلبات المباشرة والحسابات القديمة، بدون اعتبار الطلب المباشر حسابًا مسجلًا.")}<div class="table-wrap"><table><thead><tr><th>الاسم</th><th>البريد</th><th>الجوال</th><th>النوع</th><th>أول ظهور</th></tr></thead><tbody>${
       users
         .filter((u) => u.role === "customer")
         .map(
           (u) =>
-            `<tr><td>${E(u.name)}</td><td>${E(u.email)}</td><td>${u.phoneVerified ? E(u.phone) : "غير موثّق"}</td><td>${date(u.createdAt)}</td></tr>`,
+            `<tr><td>${E(u.name)}</td><td>${E(u.email)}</td><td>${E(u.phone || "—")}</td><td>${u.guest ? "طلب مباشر" : "حساب قديم"}</td><td>${date(u.createdAt)}</td></tr>`,
         )
         .join("") ||
-      '<tr><td colspan="4">لا توجد حسابات عملاء حتى الآن.</td></tr>'
+      '<tr><td colspan="5">لا توجد بيانات عملاء حتى الآن.</td></tr>'
     }</tbody></table></div>`,
   );
 }
