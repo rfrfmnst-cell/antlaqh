@@ -509,8 +509,10 @@ function resetPassword() {
   }
   return recoveryLayout("تعيين كلمة مرور جديدة", "اختر كلمة مرور بين 12 و128 حرفًا. سيُطلب منك تسجيل الدخول بعد تغييرها.", `<section class="panel"><form data-form="recovery-reset">${errors()}${field("password", "كلمة المرور الجديدة", "password", 'required minlength="12" maxlength="128" autocomplete="new-password"')}${field("passwordConfirm", "أعد كتابة كلمة المرور الجديدة", "password", 'required minlength="12" maxlength="128" autocomplete="new-password"')}<p class="small muted">يُستخدم رابط الاستعادة مرة واحدة، ويتحقق الخادم من صلاحيته. تغيير كلمة المرور ينهي جلسات الحساب المفتوحة.</p><button class="btn" type="submit">حفظ كلمة المرور الجديدة</button></form></section>`);
 }
-function authRequired(next) {
-  return `<div class="wrap">${pageHead("لنبدأ من حسابك", "احفظ تفاصيل مشروعك وتابع الردود والتحديثات.")}<div class="checkout">${empty("مساحتك الخاصة بالمشروع", "سجّل الدخول أو أنشئ حسابًا لتقديم الطلب ومتابعته بأمان.", `<div class="actions">${link("/login?next=" + encodeURIComponent(next), "تسجيل الدخول")}${link("/register?next=" + encodeURIComponent(next), "إنشاء حساب", "secondary")}</div>`)}</div></div>`;
+function authRequired(next, admin = false) {
+  if (admin)
+    return `<div class="wrap">${pageHead("دخول الإدارة", "هذه المساحة مخصصة لإدارة انطلاقة.")}<div class="checkout">${empty("يلزم تسجيل دخول الإدارة", "استخدم حساب الإدارة للوصول إلى لوحة التحكم.", link("/login?method=email&next=" + encodeURIComponent(next), "تسجيل دخول الإدارة"))}</div></div>`;
+  return `<div class="wrap">${pageHead("جلسة المتابعة غير متاحة", "طلبات العملاء لا تحتاج حسابًا أو كلمة مرور.")}<div class="checkout">${empty("ابدأ من رابط طلبك", "إذا انتهت جلسة المتابعة، ابدأ طلبًا جديدًا أو تواصل مع فريق انطلاقة لاستعادة رابط المتابعة.", `<div class="actions">${link("/start", "ابدأ طلبًا")}${whatsappLink("تواصل مع انطلاقة","btn secondary")}</div>`)}</div></div>`;
 }
 function start(query) {
   const selected = query.get("service") || "";
@@ -838,7 +840,7 @@ async function render() {
         "/profile",
       ].includes(path) || /^\/(order|contract|invoice|addons|payment|admin)(\/|$)/.test(path);
     let html;
-    if (privateRoute && !state.user) html = authRequired(raw);
+    if (privateRoute && !state.user) html = authRequired(raw, path.startsWith("/admin"));
     else if (path.startsWith("/admin") && state.user?.role !== "admin")
       throw Error("هذه المساحة متاحة لإدارة المنصة فقط.");
     else if (path === "/") html = home();
