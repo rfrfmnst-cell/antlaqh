@@ -1,0 +1,34 @@
+name: Verify Hostinger production
+
+on:
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check production health
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            echo "Attempt $attempt"
+            if BODY="$(curl -fsS --connect-timeout 15 --max-time 30 https://antlaqh.com/api/health)"; then
+              echo "$BODY"
+              export BODY
+              python - <<'PY'
+          import json, os, sys
+          data=json.loads(os.environ["BODY"])
+          print("status:", data.get("status"))
+          print("version:", data.get("version"))
+          if data.get("status") == "ok" and data.get("version") == "5.4.1":
+              sys.exit(0)
+          sys.exit(2)
+          PY
+              rc=$?
+              if [ "$rc" -eq 0 ]; then exit 0; fi
+            fi
+            sleep 20
+          done
+          exit 1
