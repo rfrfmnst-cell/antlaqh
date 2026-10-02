@@ -1055,6 +1055,7 @@ document.addEventListener("submit", async (event) => {
         method: "POST",
         body: { ...b, type: "service", template: b.service === "ready-website" ? b.template : undefined, addons: b.service === "ready-website" ? ["hosting","domain","deployment"].filter(id => b["addon_"+id]) : [] },
       });
+      if (o.trackingToken) state.trackingTokens[o.id] = o.trackingToken;
       go("/addons/" + o.id);
       notify("تم استلام طلبك. اختر الخدمات الإضافية أو تخطها للانتقال إلى العقد.");
     } else if (kind === "checkout") {
@@ -1070,6 +1071,7 @@ document.addEventListener("submit", async (event) => {
         method: "POST",
         body: { type: "product", productId: oid, promoCode: b.promoCode },
       });
+      if (o.trackingToken) state.trackingTokens[o.id] = o.trackingToken;
       go("/addons/" + o.id);
       notify("تم إنشاء الطلب. اختر الخدمات الإضافية أو تخطها للانتقال إلى العقد.");
     } else if (kind === "checkout-addons" || kind === "checkout-addons-skip") {
