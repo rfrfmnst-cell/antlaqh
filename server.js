@@ -391,6 +391,7 @@ async function api(req, res, url) {
   if (method === "GET" && path === "/api/config")
     return json(res, 200, {
       services,
+      productCheckoutAddonIds,
       customerJourney,
       launchOffer: getLaunchOffer(),
       integrations: { ga4MeasurementId },
