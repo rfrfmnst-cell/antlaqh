@@ -508,6 +508,28 @@ function authRequired(next, admin = false) {
     return `<div class="wrap">${pageHead("دخول الإدارة", "هذه المساحة مخصصة لإدارة انطلاقة.")}<div class="checkout">${empty("يلزم تسجيل دخول الإدارة", "استخدم حساب الإدارة للوصول إلى لوحة التحكم.", link("/login?method=email&next=" + encodeURIComponent(next), "تسجيل دخول الإدارة"))}</div></div>`;
   return `<div class="wrap">${pageHead("جلسة المتابعة غير متاحة", "طلبات العملاء لا تحتاج حسابًا أو كلمة مرور.")}<div class="checkout">${empty("ابدأ من رابط طلبك", "إذا انتهت جلسة المتابعة، ابدأ طلبًا جديدًا أو تواصل مع فريق انطلاقة لاستعادة رابط المتابعة.", `<div class="actions">${link("/start", "ابدأ طلبًا")}${whatsappLink("تواصل مع انطلاقة","btn secondary")}</div>`)}</div></div>`;
 }
+function trackingLink(oid) {
+  const token = state.trackingTokens[oid];
+  if (!token) return "";
+  const href = `#/track/${encodeURIComponent(oid)}/${encodeURIComponent(token)}`;
+  const base = state.config?.siteOrigin || "https://antlaqh.com";
+  return `<section class="notice tracking-link"><strong>رابط متابعة الطلب</strong><p>احفظ هذا الرابط لتفتح طلبك لاحقًا من أي جهاز بدون حساب أو كلمة مرور.</p><a class="text-link" href="${href}" dir="ltr">${E(base + "/" + href)}</a></section>`;
+}
+async function trackingOrder(path, oid, token) {
+  if (!/^[a-f0-9]{36}$/.test(oid || "") || !/^[a-f0-9]{36}$/.test(token || ""))
+    throw Error("رابط متابعة الطلب غير صالح.");
+  if (!state.user || state.user.role !== "customer") {
+    const result = await api("/api/track/" + oid + "/session", {
+      method: "POST",
+      body: { token },
+    });
+    state.user = result.user;
+    state.csrf = result.csrf;
+  }
+  state.trackingTokens[oid] = token;
+  return orderDetail(path, oid);
+}
+
 function start(query) {
   const selected = query.get("service") || "";
   const contact = state.user ? "" : `<div class="form-grid">${field("customerName", "الاسم", "text", 'required minlength="2" maxlength="100" autocomplete="name"')}${field("customerPhone", "رقم الجوال", "tel", 'required minlength="9" maxlength="16" autocomplete="tel" placeholder="05XXXXXXXX"')}</div>${field("customerEmail", "البريد الإلكتروني", "email", 'required maxlength="254" autocomplete="email"')}`;
