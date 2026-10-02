@@ -64,6 +64,8 @@ test(
       assert.deepEqual(await response.json(), {
         status: "ok",
         version,
+        databaseMode: "sqlite",
+        databaseFallback: false,
       });
     } finally {
       if (worker) await worker.terminate();
