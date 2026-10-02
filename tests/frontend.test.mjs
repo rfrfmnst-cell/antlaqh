@@ -217,13 +217,13 @@ test("an old failed request does not clear a more recent login", async () => {
   assert.equal(ui.state.csrf, "new");
 });
 
-test("navigation to the same hash renders updated account state", async () => {
+test("navigation to the same hash keeps customer account controls hidden", async () => {
   const ui = await app({ hash: "#/services" });
   const sequence = ui.state.sequence;
   ui.state.user = user;
   await ui.go("/services");
   assert.equal(ui.state.sequence, sequence + 1);
-  assert.match(ui.nodes.get("#header").innerHTML, /user-chip/);
+  assert.doesNotMatch(ui.nodes.get("#header").innerHTML, /user-chip|login-link/);
 });
 
 test("configured contact and bank details are shown without HTML injection", async () => {

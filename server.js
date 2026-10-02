@@ -202,7 +202,8 @@ function safeProduct(p, admin = false) {
   return { ...item, hasFile: !!file, ...(admin ? { file } : {}) };
 }
 function safeOrder(o) {
-  return o;
+  const { trackingTokenHash, ...safe } = o;
+  return safe;
 }
 function checkoutAllowedAddonIds(order) {
   if (order.type === "product") return productCheckoutAddonIds;
@@ -357,6 +358,7 @@ async function api(req, res, url) {
     rate(`write:${ip}`, 150);
   }
   const auth = await session(req);
+  const trackingSessionMatch = path.match(/^\/api\/track\/([a-f0-9]{36})\/session$/);
   const publicWrite = [
     "/api/assistant",
     "/api/auth/guest",
@@ -368,7 +370,7 @@ async function api(req, res, url) {
     "/api/auth/recovery/verify",
     "/api/auth/recovery/reset",
   ];
-  if (!["GET", "HEAD"].includes(method) && !publicWrite.includes(path)) {
+  if (!["GET", "HEAD"].includes(method) && !publicWrite.includes(path) && !trackingSessionMatch) {
     authorize(auth);
     if (req.headers["x-csrf-token"] !== auth.s.csrf)
       throw fail(403, "انتهت صلاحية الصفحة. أعد تحميلها ثم حاول.");
@@ -406,6 +408,7 @@ async function api(req, res, url) {
       payments: "bank_transfer",
       bankTransfer: { bank: "البنك الأهلي السعودي", iban: "SA3610000044000001058010", currency: "SAR" },
       environment: production ? "production" : "development",
+      siteOrigin: origin,
     });
   if (method === "POST" && path === "/api/assistant") {
     rate(`assistant:${ip}`, 8, 5 * 60 * 1000);
@@ -419,6 +422,19 @@ async function api(req, res, url) {
       200,
       auth ? { user: publicUser(auth.u), csrf: auth.s.csrf } : { user: null },
     );
+  if (method === "POST" && trackingSessionMatch) {
+    rate(`track-session:${ip}`, 30);
+    const oid = trackingSessionMatch[1];
+    const b = await jsonBody(req);
+    const token = text(b.token, 20, 120);
+    const order = await db.get("order", oid);
+    if (!order || !order.trackingTokenHash || digest(token) !== order.trackingTokenHash)
+      throw fail(404, "رابط متابعة الطلب غير صالح.");
+    const user = await db.get("user", order.owner);
+    if (!user || user.disabled || user.role !== "customer")
+      throw fail(404, "رابط متابعة الطلب غير صالح.");
+    return json(res, 200, await login(res, user));
+  }
   if (method === "POST" && path === "/api/auth/recovery/request") {
     rate(`recovery-request:${ip}`, 12);
     return json(res, 200, await recovery.request(await jsonBody(req)));
@@ -446,9 +462,8 @@ async function api(req, res, url) {
       createdAt: now(),
     };
     if (b.phone) u.phone = normalizePhone(b.phone);
-    const result = await login(res, u);
     await db.insert("user", u, guestId);
-    return json(res, 201, result);
+    return json(res, 201, await login(res, u));
   }
   if (method === "POST" && path === "/api/auth/register") {
     rate(`register:${ip}`, 8);
@@ -683,11 +698,13 @@ async function api(req, res, url) {
     rate(`order:${auth.u.id}`, 15);
     const createdAt = now();
     const promotion = claimPromotion(b.promoCode, Date.parse(createdAt));
+    const trackingToken = id();
     const o = {
       id: id(),
       number: `INT-${Date.now().toString(36).toUpperCase()}-${id().slice(0, 4).toUpperCase()}`,
       owner: auth.u.id,
-      customer: { name: auth.u.name, email: auth.u.email },
+      customer: { name: auth.u.name, email: auth.u.email, phone: auth.u.phone || "" },
+      trackingTokenHash: digest(trackingToken),
       createdAt,
       updatedAt: now(),
       promotion,
@@ -736,7 +753,7 @@ async function api(req, res, url) {
     }
     event(o, "تم استلام الطلب", auth.u);
     await db.insert("order", o, auth.u.id);
-    return json(res, 201, safeOrder(o));
+    return json(res, 201, { ...safeOrder(o), trackingToken });
   }
   if (method === "GET" && path === "/api/orders") {
     authorize(auth);
@@ -1094,7 +1111,10 @@ async function api(req, res, url) {
         active: orders.filter(
           (o) => !["completed", "cancelled"].includes(o.status),
         ).length,
-        customers: users.filter((u) => u.role === "customer").length,
+        customers: new Set(users.filter((u) => u.role === "customer").map((u) => String(u.email || u.id).toLowerCase())).size,
+        contracts: orders.filter((o) => o.currentContract).length,
+        awaitingPayment: orders.filter((o) => o.status === "awaiting_payment").length,
+        paidOrders: orders.filter((o) => o.payment?.confirmed && !o.payment.revoked).length,
         revenue: orders.reduce(
           (n, o) =>
             n +

@@ -15,6 +15,7 @@ const state = {
   resetToken: "",
   resetExpiresAt: 0,
   recoveryOperation: 0,
+  trackingTokens: Object.create(null),
 };
 const escape = (value) =>
   String(value ?? "").replace(
@@ -322,8 +323,7 @@ function logo(compact = false) {
   return `<a class="brand ${compact ? "brand-footer" : ""}" href="#/" aria-label="إنطلاقة للتجارة الإلكترونية، الصفحة الرئيسية"><img class="brand-logo" src="/assets/brand-logo-transparent.png" alt="شعار إنطلاقة" width="112" height="96"><span class="brand-name">إنطلاقة<span>للتجارة الإلكترونية</span></span></a>`;
 }
 function header(path) {
-  const authed = !!state.user,
-    admin = state.user?.role === "admin";
+  const admin = state.user?.role === "admin";
   const businessPhone = state.config?.businessPhone || "+966553575760";
   const businessEmail = state.config?.businessEmail || "antlaqh2030@gmail.com";
   const phoneLabel = businessPhone === "+966553575760" ? "0553575760" : businessPhone;
@@ -340,7 +340,7 @@ function header(path) {
       )
       .join(
         "",
-      )}</nav><div class="header-actions">${authed ? `<a class="user-chip" href="#${admin ? "/admin" : "/dashboard"}"><span class="avatar">${E(state.user.name.slice(0, 1))}</span><span class="user-name">${E(state.user.name.split(" ")[0])}</span></a>` : ""}${link("/start", "ابدأ مشروعك " + icon("arrow"), "header-start")}<button class="btn ghost menu-button" data-action="menu" aria-label="فتح القائمة" aria-expanded="false" aria-controls="main-nav">${icon("menu")}</button></div></div>`;
+      )}</nav><div class="header-actions">${admin ? `<a class="user-chip" href="#/admin"><span class="avatar">${E(state.user.name.slice(0, 1))}</span><span class="user-name">${E(state.user.name.split(" ")[0])}</span></a>` : ""}${link("/start", "ابدأ مشروعك " + icon("arrow"), "header-start")}<button class="btn ghost menu-button" data-action="menu" aria-label="فتح القائمة" aria-expanded="false" aria-controls="main-nav">${icon("menu")}</button></div></div>`;
   $("#footer").innerHTML =
     `<div class="wrap footer-cta"><div><span class="footer-eyebrow">خطوتك القادمة تبدأ هنا</span><h2>فكرتك تستحق انطلاقة.</h2><p>لنحوّل ما تتخيّله إلى حضور رقمي يعبّر عن مشروعك.</p></div><a class="btn footer-start" href="#/start">ابدأ مشروعك ${icon("arrow")}</a></div><div class="wrap footer-top"><div class="footer-brand">${logo(true)}<p>نصنع لمشروعك بداية مدروسة، وحضورًا رقميًا يعبّر عنه. من أول فكرة إلى تجربة تستحق أن تُشارك.</p><span class="footer-signature">بدايات مدروسة. أثر مستمر.</span></div><div class="footer-column"><h3>اكتشف انطلاقة</h3><nav aria-label="اكتشف انطلاقة"><a href="#/services">حلولنا الرقمية</a><a href="#/store">المتجر الرقمي</a><a href="#/ready-websites">المواقع الجاهزة</a><a href="#/launch-offer">عرض الإطلاق</a><a href="#/about">قصتنا وطريقتنا</a></nav></div><div class="footer-column"><h3>المساعدة والمتابعة</h3><nav aria-label="المساعدة والمتابعة"><a href="#/start">ابدأ أو تابع طلبك</a><a href="#/support">الدعم والمساعدة</a><button type="button" data-assistant-open>مساعد انطلاقة ${icon("spark")}</button><a href="#/terms">الشروط والأحكام</a><a href="#/privacy">سياسة الخصوصية</a>${state.config?.integrations?.ga4MeasurementId ? `<button type="button" data-analytics-settings>خيارات قياس الزيارات</button>` : ""}</nav></div><div class="footer-column footer-reach"><h3>لنتحدث عن مشروعك</h3><p>نحن بالقرب منك، من أول سؤال إلى الخطوة التالية.</p><div class="footer-contact"><a href="tel:${E(businessPhone)}"><span>اتصل بنا</span><b dir="ltr">${E(phoneLabel)}</b></a><a href="mailto:${E(businessEmail)}"><span>البريد الإلكتروني</span><b dir="ltr">${E(businessEmail)}</b></a>${whatsappLink("تواصل عبر WhatsApp","text-link")}</div></div></div><div class="wrap footer-utility"><div class="footer-payment"><span class="footer-eyebrow">الدفع بعد الاتفاق</span><div>${icon("globe")}<strong>تحويل بنكي</strong></div><p>التحويل البنكي هو وسيلة الدفع الوحيدة حاليًا.</p></div>${shareLinks()}</div><div class="wrap footer-bottom"><span>© ${new Date().getFullYear()} إنطلاقة للتجارة الإلكترونية. جميع الحقوق محفوظة.</span><a href="#/">العودة للرئيسية ${icon("arrow")}</a></div><a class="floating-contact" href="https://wa.me/966553575760?text=${encodeURIComponent("مرحبًا انطلاقة، أود الاستفسار عن خدماتكم.")}" target="_blank" rel="noopener noreferrer" aria-label="راسل انطلاقة عبر WhatsApp على ${E(phoneLabel)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 3h4l2 5-3 2c2 3 3 4 6 6l2-3 5 2v4c0 1-1 2-2 2C10 21 3 14 3 5c0-1 1-2 2-2Z"/></svg><span>راسلنا على WhatsApp</span></a>`;
 }
@@ -457,35 +457,31 @@ function home() {
 function pageHead(title, subtitle = "", action = "") {
   return `<div class="page-head"><div><h1>${title}</h1>${subtitle ? `<p>${subtitle}</p>` : ""}</div>${action}</div>`;
 }
-function sidebar(path, admin = false) {
-  const items = admin
-    ? [
-        ["/admin", "نظرة عامة", "grid"],
-        ["/admin/orders", "الطلبات", "bag"],
-        ["/admin/products", "المنتجات الرقمية", "file"],
-        ["/admin/customers", "العملاء", "user"],
-        ["/support", "تذاكر الدعم", "message"],
-        ["/profile", "حسابي", "user"],
-      ]
-    : [
-        ["/dashboard", "نظرة عامة", "grid"],
-        ["/orders", "طلباتي", "bag"],
-        ["/contracts", "عقودي", "file"],
-        ["/invoices", "المدفوعات", "file"],
-        ["/notifications", "التحديثات", "bell"],
-        ["/support", "الدعم والمساعدة", "message"],
-        ["/profile", "إعدادات الحساب", "user"],
-      ];
-  return `<aside class="sidebar" aria-label="قائمة الحساب"><div class="sidebar-label">${admin ? "إدارة المنصة" : "مساحتك في انطلاقة"}</div>${items.map(([p, l, i]) => `<a href="#${p}" class="${path === p ? "active" : ""}" ${path === p ? 'aria-current="page"' : ""}>${icon(i)}${l}</a>`).join("")}<div class="divider"></div><button data-action="logout">${icon("logout")}تسجيل الخروج</button></aside>`;
+function sidebar(path) {
+  const items = [
+    ["/admin", "نظرة عامة", "grid"],
+    ["/admin/orders", "الطلبات", "bag"],
+    ["/admin/contracts", "العقود", "file"],
+    ["/admin/payments", "المدفوعات", "file"],
+    ["/admin/customers", "العملاء", "user"],
+    ["/admin/products", "المنتجات الرقمية", "file"],
+    ["/admin/support", "الدعم والمحادثات", "message"],
+    ["/admin/settings", "الإعدادات", "user"],
+  ];
+  return `<aside class="sidebar" aria-label="لوحة إدارة انطلاقة"><div class="sidebar-label">فريق انطلاقة</div>${items.map(([p, l, i]) => `<a href="#${p}" class="${path === p ? "active" : ""}" ${path === p ? 'aria-current="page"' : ""}>${icon(i)}${l}</a>`).join("")}<div class="divider"></div><button data-action="logout">${icon("logout")}تسجيل خروج الإدارة</button></aside>`;
 }
 function workspace(path, content) {
-  return `<div class="wrap workspace">${sidebar(path, state.user.role === "admin")}<div class="workspace-content">${content}</div></div>`;
+  if (state.user?.role !== "admin")
+    return `<div class="wrap"><div class="workspace-content">${content}</div></div>`;
+  return `<div class="wrap workspace">${sidebar(path)}<div class="workspace-content">${content}</div></div>`;
 }
 function authPage(register, query) {
-  const emailLogin = query.get("method") === "email" || (query.get("next") || "").startsWith("/admin");
-  const next = query.get("next") || "/dashboard";
-  return `<div class="wrap"><div class="auth-layout"><div class="auth-story"><div class="eyebrow">مساحتك في انطلاقة</div><h2>كل ما يخص مشروعك،<br>أقرب إليك.</h2><p>حساب واحد يجمع طلباتك وعقودك وملفاتك وتواصلك مع الفريق.</p><div class="auth-points"><div class="auth-point">${icon("bag")} متابعة الطلبات والمشاريع</div><div class="auth-point">${icon("file")} عروض أسعار وعقود واضحة</div><div class="auth-point">${icon("message")} تواصل وملاحظات في مكان واحد</div></div></div><div class="auth-form"><h1>${register ? "أنشئ حسابك" : "أهلًا بعودتك"}</h1><p class="muted">${register ? "خطوتك الأولى نحو مشروعك القادم." : "سجّل الدخول لمتابعة مشروعك."}</p><form data-form="${register ? "register" : "login"}" data-next="${E(next)}">${errors()}${register ? field("name", "الاسم الكامل", "text", 'required minlength="2" maxlength="100" autocomplete="name"') : ""}${register || !emailLogin ? field("phone", "رقم الجوال", "tel", 'required autocomplete="tel" inputmode="tel" placeholder="05XXXXXXXX" maxlength="30"') : ""}${register || emailLogin ? field("email", register ? "البريد الإلكتروني للمراسلات" : "بريد حساب الإدارة أو الحساب القديم", "email", 'required autocomplete="email" maxlength="180"') : ""}${field("password", "كلمة المرور", "password", `required ${register ? 'minlength="12"' : ""} maxlength="128" autocomplete="${register ? "new-password" : "current-password"}"`)}${register ? `<p class="small muted">12 حرفًا على الأقل؛ يُفضّل استخدام عبارة طويلة يسهل عليك تذكرها.</p><label class="check"><input type="checkbox" name="acceptTerms" required><span>قرأت <a href="#/terms" target="_blank" rel="noopener">الشروط والأحكام</a> و<a href="#/privacy" target="_blank" rel="noopener">سياسة الخصوصية</a> وأوافق عليهما.</span></label>` : ""}<button class="btn" type="submit">${register ? "إنشاء الحساب" : "تسجيل الدخول"}</button></form>${!register && !emailLogin ? `<details class="spaced"><summary>حساب قديم أو حساب إدارة؟</summary><p>ادخل بالبريد مرة واحدة، ثم اربط رقم الدخول من إعدادات الحساب.</p><a class="text-link" href="#/login?method=email&next=${encodeURIComponent(next)}">الدخول للحساب القديم أو الإدارة</a></details>` : ""}<p class="auth-switch">${register ? "لديك حساب؟" : "جديد على انطلاقة؟"} <a href="#/${register ? "login" : "register"}?next=${encodeURIComponent(next)}">${register ? "سجّل الدخول" : "أنشئ حسابًا"}</a></p></div></div></div>`;
+  const adminLogin = (query.get("next") || "").startsWith("/admin");
+  const emailLogin = query.get("method") === "email" || adminLogin;
+  const next = query.get("next") || (adminLogin ? "/admin" : "/dashboard");
+  return `<div class="wrap"><div class="auth-layout"><div class="auth-story"><div class="eyebrow">${adminLogin ? "إدارة انطلاقة" : "حساب قديم"}</div><h2>${adminLogin ? "لوحة فريق انطلاقة." : "الوصول للحسابات القديمة."}</h2><p>${adminLogin ? "إدارة الطلبات والعقود والمدفوعات والعملاء من مساحة واحدة." : "طلبات العملاء الجديدة لا تحتاج حسابًا أو كلمة مرور."}</p><div class="auth-points"><div class="auth-point">${icon("bag")} متابعة الطلبات والمشاريع</div><div class="auth-point">${icon("file")} العقود والمدفوعات</div><div class="auth-point">${icon("message")} الدعم والمحادثات</div></div></div><div class="auth-form"><h1>${adminLogin ? "دخول فريق انطلاقة" : register ? "إنشاء حساب قديم" : "تسجيل الدخول"}</h1><p class="muted">${adminLogin ? "استخدم بريد وكلمة مرور الإدارة." : "هذا المسار للحسابات القديمة فقط؛ العملاء الجدد يبدأون الطلب مباشرة."}</p><form data-form="${register ? "register" : "login"}" data-next="${E(next)}">${errors()}${register ? field("name", "الاسم الكامل", "text", 'required minlength="2" maxlength="100" autocomplete="name"') : ""}${register || !emailLogin ? field("phone", "رقم الجوال", "tel", 'required autocomplete="tel" inputmode="tel" placeholder="05XXXXXXXX" maxlength="30"') : ""}${register || emailLogin ? field("email", adminLogin ? "بريد الإدارة" : "البريد الإلكتروني", "email", 'required autocomplete="email" maxlength="180"') : ""}${field("password", "كلمة المرور", "password", `required ${register ? 'minlength="12"' : ""} maxlength="128" autocomplete="${register ? "new-password" : "current-password"}"`)}<button class="btn" type="submit">${adminLogin ? "دخول الإدارة" : "تسجيل الدخول"}</button></form>${adminLogin ? "" : `<p class="auth-switch">طلبات العملاء الجديدة لا تحتاج حسابًا. <a href="#/start">ابدأ طلبك مباشرة</a></p>`}</div></div></div>`;
 }
+
 function recoveryLayout(title, description, content) {
   return `<div class="wrap"><div class="checkout">${pageHead(title, description)}${content}<p class="small spaced"><a class="text-link" href="#/login">العودة إلى تسجيل الدخول</a></p></div></div>`;
 }
@@ -514,6 +510,28 @@ function authRequired(next, admin = false) {
     return `<div class="wrap">${pageHead("دخول الإدارة", "هذه المساحة مخصصة لإدارة انطلاقة.")}<div class="checkout">${empty("يلزم تسجيل دخول الإدارة", "استخدم حساب الإدارة للوصول إلى لوحة التحكم.", link("/login?method=email&next=" + encodeURIComponent(next), "تسجيل دخول الإدارة"))}</div></div>`;
   return `<div class="wrap">${pageHead("جلسة المتابعة غير متاحة", "طلبات العملاء لا تحتاج حسابًا أو كلمة مرور.")}<div class="checkout">${empty("ابدأ من رابط طلبك", "إذا انتهت جلسة المتابعة، ابدأ طلبًا جديدًا أو تواصل مع فريق انطلاقة لاستعادة رابط المتابعة.", `<div class="actions">${link("/start", "ابدأ طلبًا")}${whatsappLink("تواصل مع انطلاقة","btn secondary")}</div>`)}</div></div>`;
 }
+function trackingLink(oid) {
+  const token = state.trackingTokens[oid];
+  if (!token) return "";
+  const href = `#/track/${encodeURIComponent(oid)}/${encodeURIComponent(token)}`;
+  const base = state.config?.siteOrigin || "https://antlaqh.com";
+  return `<section class="notice tracking-link"><strong>رابط متابعة الطلب</strong><p>احفظ هذا الرابط لتفتح طلبك لاحقًا من أي جهاز بدون حساب أو كلمة مرور.</p><a class="text-link" href="${href}" dir="ltr">${E(base + "/" + href)}</a></section>`;
+}
+async function trackingOrder(path, oid, token) {
+  if (!/^[a-f0-9]{36}$/.test(oid || "") || !/^[a-f0-9]{36}$/.test(token || ""))
+    throw Error("رابط متابعة الطلب غير صالح.");
+  if (!state.user || state.user.role !== "customer") {
+    const result = await api("/api/track/" + oid + "/session", {
+      method: "POST",
+      body: { token },
+    });
+    state.user = result.user;
+    state.csrf = result.csrf;
+  }
+  state.trackingTokens[oid] = token;
+  return orderDetail(path, oid);
+}
+
 function start(query) {
   const selected = query.get("service") || "";
   const contact = state.user ? "" : `<div class="form-grid">${field("customerName", "الاسم", "text", 'required minlength="2" maxlength="100" autocomplete="name"')}${field("customerPhone", "رقم الجوال", "tel", 'required minlength="9" maxlength="16" autocomplete="tel" placeholder="05XXXXXXXX"')}</div>${field("customerEmail", "البريد الإلكتروني", "email", 'required maxlength="254" autocomplete="email"')}`;
@@ -544,7 +562,9 @@ async function dashboard(path) {
   const tiles = admin
     ? [
         [summary.active, "طلبات نشطة"],
-        [summary.customers, "عميل مسجّل"],
+        [summary.contracts, "عقود صادرة"],
+        [summary.awaitingPayment, "بانتظار الدفع"],
+        [summary.customers, "عملاء"],
         [money(summary.revenue), "مبالغ مؤكدة"],
         [summary.openTickets, "تذاكر مفتوحة"],
       ]
@@ -556,7 +576,7 @@ async function dashboard(path) {
       ];
   return workspace(
     path,
-    `${pageHead(admin ? "لوحة إدارة انطلاقة" : `أهلًا، ${E(state.user.name.split(" ")[0])}`, "متابعة واضحة لكل ما يحتاج انتباهك.", link(admin ? "/admin/products" : "/start", admin ? "إدارة المنتجات" : "مشروع جديد"))}<div class="stats">${tiles.map(([v, l], i) => `<div class="stat ${i === 0 ? "featured" : ""}"><span class="value">${v}</span><span class="label">${l}</span></div>`).join("")}</div><div class="section-head"><h2>أحدث الطلبات</h2><a class="text-link" href="#${admin ? "/admin/orders" : "/orders"}">عرض جميع الطلبات</a></div>${ordersTable(orders.slice(0, 6), admin)}${!admin ? journey() : ""}${!admin ? `<div class="banner"><div><h2>للفكرة التالية مساحة.</h2><p>اكتشف الخدمات التي تدعم خطوتك القادمة.</p></div>${link("/services", "تصفّح الخدمات", "lime")}</div>` : ""}`,
+    `${pageHead(admin ? "لوحة إدارة انطلاقة" : `أهلًا، ${E(state.user.name.split(" ")[0])}`, "متابعة واضحة لكل ما يحتاج انتباهك.", link(admin ? "/admin/orders" : "/start", admin ? "فتح الطلبات" : "مشروع جديد"))}<div class="stats">${tiles.map(([v, l], i) => `<div class="stat ${i === 0 ? "featured" : ""}"><span class="value">${v}</span><span class="label">${l}</span></div>`).join("")}</div><div class="section-head"><h2>أحدث الطلبات</h2><a class="text-link" href="#${admin ? "/admin/orders" : "/orders"}">عرض جميع الطلبات</a></div>${ordersTable(orders.slice(0, 6), admin)}${!admin ? journey() : ""}${!admin ? `<div class="banner"><div><h2>للفكرة التالية مساحة.</h2><p>اكتشف الخدمات التي تدعم خطوتك القادمة.</p></div>${link("/services", "تصفّح الخدمات", "lime")}</div>` : ""}`,
   );
 }
 async function orderList(path) {
@@ -627,7 +647,7 @@ async function orderDetail(path, oid) {
   if (state.user?.role === "admin") o.contractProvider = await api("/api/admin/contract-provider").catch(() => ({}));
   return workspace(
     path,
-    `<div class="breadcrumb"><a href="#${state.user.role === "admin" ? "/admin/orders" : "/orders"}">الطلبات</a><span>/</span><span dir="ltr">${E(o.number)}</span></div>${pageHead(E(o.title), `${o.type === "product" ? "طلب منتج رقمي" : "طلب خدمة"} · ${date(o.createdAt)}`, badge(o))}${o.type === "service" ? progress(o) : ""}<div class="two-col"><div><section class="panel"><h2>تفاصيل الطلب</h2><p class="pre">${E(o.description)}</p>${o.siteOptions ? `<div class="notice"><strong>النموذج: ${E(o.siteOptions.template.title)}</strong><p>الإضافات المطلوبة: ${o.siteOptions.addons.map(a=>E(a.title)).join("، ") || "دون إضافات"}. يشملها العرض فقط بحسب الاتفاق المكتوب.</p></div>` : ""}${!o.amount ? priceSummary(o) : ""}<div class="key-values"><div><span>صاحب الطلب</span><strong>${E(o.customer.name)}</strong></div><div><span>الميزانية المذكورة</span><strong>${E(o.budget || "غير محددة")}</strong></div></div></section>${
+    `<div class="breadcrumb"><a href="#${state.user.role === "admin" ? "/admin/orders" : "/orders"}">الطلبات</a><span>/</span><span dir="ltr">${E(o.number)}</span></div>${pageHead(E(o.title), `${o.type === "product" ? "طلب منتج رقمي" : "طلب خدمة"} · ${date(o.createdAt)}`, badge(o))}${trackingLink(o.id)}${o.type === "service" ? progress(o) : ""}<div class="two-col"><div><section class="panel"><h2>تفاصيل الطلب</h2><p class="pre">${E(o.description)}</p>${o.siteOptions ? `<div class="notice"><strong>النموذج: ${E(o.siteOptions.template.title)}</strong><p>الإضافات المطلوبة: ${o.siteOptions.addons.map(a=>E(a.title)).join("، ") || "دون إضافات"}. يشملها العرض فقط بحسب الاتفاق المكتوب.</p></div>` : ""}${!o.amount ? priceSummary(o) : ""}<div class="key-values"><div><span>صاحب الطلب</span><strong>${E(o.customer.name)}</strong><p class="small">${E(o.customer.email || "")}${o.customer.phone ? " · " + E(o.customer.phone) : ""}</p></div><div><span>الميزانية المذكورة</span><strong>${E(o.budget || "غير محددة")}</strong></div></div>${Array.isArray(o.checkoutAddons) && o.checkoutAddons.length ? `<div class="notice"><strong>الخدمات الإضافية المختارة</strong><ul class="feature-list">${o.checkoutAddons.map((a) => `<li>${icon("check")}<span>${E(a.title)} · ${money(a.pricing?.from || 0)}</span></li>`).join("")}</ul></div>` : '<p class="small muted">لم يضف العميل خدمات إضافية لهذا الطلب.</p>'}</section>${
       q
         ? `<section class="panel"><h2>العرض والعقد</h2>${contractCard(q, o)}${
             o.contracts.length > 1
@@ -675,7 +695,7 @@ async function checkoutAddons(oid) {
     : (state.config.productCheckoutAddonIds || []);
   const addons = state.config.services.filter((service) => ids.includes(service.id));
   const baseAmount = o.type === "service" ? (o.advertisedPrice?.from || 0) : (o.subtotal || o.amount || 0);
-  return `<div class="wrap"><div class="checkout">${pageHead("أضف ما تحتاجه", "الخدمات الإضافية اختيارية بالكامل؛ اختر المناسب أو تخط هذه الخطوة.")}<section class="panel"><div class="notice"><strong>طلبك الأساسي:</strong> ${E(o.title)}${baseAmount ? ` · ${money(baseAmount)}` : ""}</div>${addons.length ? `<form data-form="checkout-addons" data-id="${o.id}">${errors()}<div class="three-col">${addons.map((addon) => `<label class="panel addon-option"><input type="checkbox" name="addon_${E(addon.id)}"><span><strong>${E(addon.title)}</strong><small>${E(addon.description)}</small><b>${money(addon.pricing?.from || 0)} ${E(addon.pricing?.unit || "")}</b></span></label>`).join("")}</div><div class="actions spaced"><button class="btn" type="submit">اختيار والمتابعة إلى العقد</button></div></form>` : '<p class="muted">لا توجد خدمات إضافية مقترحة لهذا الطلب حاليًا.</p>'}<form data-form="checkout-addons-skip" data-id="${o.id}" class="spaced">${errors()}<button class="btn secondary" type="submit">تخطي الخدمات الإضافية</button></form></section></div></div>`;
+  return `<div class="wrap"><div class="checkout">${pageHead("أضف ما تحتاجه", "الخدمات الإضافية اختيارية بالكامل؛ اختر المناسب أو تخط هذه الخطوة.")}${trackingLink(o.id)}<section class="panel"><div class="notice"><strong>طلبك الأساسي:</strong> ${E(o.title)}${baseAmount ? ` · ${money(baseAmount)}` : ""}</div>${addons.length ? `<form data-form="checkout-addons" data-id="${o.id}">${errors()}<div class="three-col">${addons.map((addon) => `<label class="panel addon-option"><input type="checkbox" name="addon_${E(addon.id)}"><span><strong>${E(addon.title)}</strong><small>${E(addon.description)}</small><b>${money(addon.pricing?.from || 0)} ${E(addon.pricing?.unit || "")}</b></span></label>`).join("")}</div><div class="actions spaced"><button class="btn" type="submit">اختيار والمتابعة إلى العقد</button></div></form>` : '<p class="muted">لا توجد خدمات إضافية مقترحة لهذا الطلب حاليًا.</p>'}<form data-form="checkout-addons-skip" data-id="${o.id}" class="spaced">${errors()}<button class="btn secondary" type="submit">تخطي الخدمات الإضافية</button></form></section></div></div>`;
 }
 
 async function paymentPage(oid) {
@@ -683,7 +703,7 @@ async function paymentPage(oid) {
   const q = o.contracts.find((contract) => contract.id === o.currentContract);
   if (o.status === "quoted" && q && !q.acceptedAt)
     return `<div class="wrap"><div class="checkout">${pageHead("الدفع", "يجب الموافقة على العقد قبل الانتقال للدفع.")}<section class="panel">${link("/contract/" + o.id + "/" + q.id, "مراجعة العقد والموافقة")}</section></div></div>`;
-  return `<div class="wrap"><div class="checkout">${pageHead("الدفع", "بعد الموافقة على العقد أكمل التحويل وأرسل الإيصال للمراجعة.")}${o.type === "service" ? progress(o) : ""}${paymentCard(o)}<div class="actions spaced">${link("/order/" + o.id, "متابعة الطلب", "secondary")}</div></div></div>`;
+  return `<div class="wrap"><div class="checkout">${pageHead("الدفع", "بعد الموافقة على العقد أكمل التحويل وأرسل الإيصال للمراجعة.")}${trackingLink(o.id)}${o.type === "service" ? progress(o) : ""}${paymentCard(o)}<div class="actions spaced">${link("/order/" + o.id, "متابعة الطلب", "secondary")}</div></div></div>`;
 }
 
 async function contracts(path) {
@@ -747,17 +767,35 @@ async function notifications(path) {
 }
 async function support(path) {
   const tickets = await api("/api/tickets");
+  const admin = state.user.role === "admin";
   return workspace(
     path,
-    `${pageHead(state.user.role === "admin" ? "تذاكر الدعم" : "الدعم والمساعدة", "محادثة خاصة لمتابعة سؤالك مع الفريق.")}<section class="panel contact-channel"><h2>قناة WhatsApp</h2><p>راسل فريق انطلاقة على الرقم 0553575760. يفتح الزر محادثة مباشرة؛ لا يرسل بيانات حسابك أو طلباتك تلقائيًا. لحفظ الملاحظات ضمن مشروعك، استخدم محادثة الطلب أو تذكرة الدعم.</p>${whatsappLink()}</section><div class="two-col"><section class="panel"><h2>التذاكر</h2>${tickets.length ? tickets.map((t) => `<details class="ticket"><summary><span class="ticket-head"><strong>${E(t.subject)}</strong><span class="badge ${t.status === "closed" ? "completed" : "received"}">${t.status === "closed" ? "مغلقة" : "مفتوحة"}</span></span><span class="small muted">${E(t.name)} · ${date(t.createdAt)}</span></summary><div class="spaced">${t.messages.map((m) => `<div class="message ${m.role === "admin" ? "admin" : ""}"><div class="message-meta"><strong>${E(m.by)}</strong><span>${date(m.at)}</span></div><p class="pre">${E(m.message)}</p></div>`).join("")}<form data-form="ticket-reply" data-id="${t.id}">${errors()}${textarea("message", "إضافة رد", 'required maxlength="5000"')}${state.user.role === "admin" ? `<div class="field"><label for="ticket-status-${t.id}">حالة التذكرة</label><select id="ticket-status-${t.id}" name="status"><option value="open" ${t.status === "open" ? "selected" : ""}>مفتوحة</option><option value="closed" ${t.status === "closed" ? "selected" : ""}>مغلقة</option></select></div>` : ""}<button class="btn" type="submit">إرسال الرد</button></form></div></details>`).join("") : '<p class="muted">لا توجد تذاكر حتى الآن.</p>'}</section><section class="panel"><h2>تذكرة جديدة</h2><form data-form="ticket">${errors()}${field("subject", "عنوان السؤال", "text", 'required minlength="3" maxlength="180"')}${textarea("message", "كيف يمكننا مساعدتك؟", 'required minlength="10" maxlength="5000"')}<button class="btn" type="submit">إرسال التذكرة</button></form></section></div>`,
+    `${pageHead(admin ? "الدعم والمحادثات" : "الدعم والمساعدة", admin ? "جميع تذاكر العملاء ومحادثات الدعم في مكان واحد." : "محادثة خاصة لمتابعة سؤالك مع الفريق.")}<section class="panel contact-channel"><h2>قناة WhatsApp</h2><p>راسل فريق انطلاقة على الرقم 0553575760. يفتح الزر محادثة مباشرة؛ لا يرسل بيانات حسابك أو طلباتك تلقائيًا. لحفظ الملاحظات ضمن مشروعك، استخدم محادثة الطلب أو تذكرة الدعم.</p>${whatsappLink()}</section><div class="two-col"><section class="panel"><h2>التذاكر</h2>${tickets.length ? tickets.map((t) => `<details class="ticket"><summary><span class="ticket-head"><strong>${E(t.subject)}</strong><span class="badge ${t.status === "closed" ? "completed" : "received"}">${t.status === "closed" ? "مغلقة" : "مفتوحة"}</span></span><span class="small muted">${E(t.name)} · ${date(t.createdAt)}</span></summary><div class="spaced">${t.messages.map((m) => `<div class="message ${m.role === "admin" ? "admin" : ""}"><div class="message-meta"><strong>${E(m.by)}</strong><span>${date(m.at)}</span></div><p class="pre">${E(m.message)}</p></div>`).join("")}<form data-form="ticket-reply" data-id="${t.id}">${errors()}${textarea("message", "إضافة رد", 'required maxlength="5000"')}${state.user.role === "admin" ? `<div class="field"><label for="ticket-status-${t.id}">حالة التذكرة</label><select id="ticket-status-${t.id}" name="status"><option value="open" ${t.status === "open" ? "selected" : ""}>مفتوحة</option><option value="closed" ${t.status === "closed" ? "selected" : ""}>مغلقة</option></select></div>` : ""}<button class="btn" type="submit">إرسال الرد</button></form></div></details>`).join("") : '<p class="muted">لا توجد تذاكر حتى الآن.</p>'}</section>${admin ? "" : `<section class="panel"><h2>تذكرة جديدة</h2><form data-form="ticket">${errors()}${field("subject", "عنوان السؤال", "text", 'required minlength="3" maxlength="180"')}${textarea("message", "كيف يمكننا مساعدتك؟", 'required minlength="10" maxlength="5000"')}<button class="btn" type="submit">إرسال التذكرة</button></form></section>`}</div>`,
   );
 }
-function profile(path) {
+async function adminSettings(path) {
+  const provider = await api("/api/admin/contract-provider").catch(() => ({}));
   return workspace(
     path,
-    `${pageHead("إعدادات الحساب", "بيانات حسابك ووسائل حمايته.")}<div class="two-col"><div><section class="panel"><h2>بياناتك</h2><div class="key-values"><div><span>الاسم</span><strong>${E(state.user.name)}</strong></div><div><span>البريد الإلكتروني</span><strong>${E(state.user.email)}</strong></div><div><span>تاريخ الانضمام</span><strong>${date(state.user.createdAt)}</strong></div><div><span>الجوال</span><strong>${state.user.phoneVerified ? E(state.user.phone) + " · موثّق" : "لم يتم توثيقه"}</strong></div></div></section><section class="panel"><h2>تغيير كلمة المرور</h2><form data-form="password">${errors()}${field("currentPassword", "كلمة المرور الحالية", "password", 'required autocomplete="current-password" maxlength="128"')}${field("password", "كلمة المرور الجديدة", "password", 'required minlength="12" maxlength="128" autocomplete="new-password"')}<p class="small muted">تغيير كلمة المرور ينهي الجلسات الأخرى المفتوحة لحسابك.</p><button class="btn" type="submit">حفظ كلمة المرور</button></form></section></div><section class="panel"><h2>رقم الجوال للدخول</h2>${state.user.loginPhone ? `<p dir="ltr">${E(state.user.loginPhone)}</p><p class="small muted">الدخول بهذا الرقم وكلمة المرور. توثيق ملكية الرقم عبر SMS منفصل.</p>` : `<p class="small muted">اربط رقمك لتستخدمه مع كلمة المرور بدل البريد.</p><form data-form="login-phone">${errors()}${field("phone", "رقم الجوال", "tel", 'required placeholder="05XXXXXXXX" autocomplete="tel"')}${field("currentPassword", "كلمة المرور الحالية", "password", 'required maxlength="128" autocomplete="current-password"')}<button class="btn" type="submit">ربط رقم الدخول</button></form>`}<h2 class="spaced">توثيق ملكية الجوال</h2>${state.config.smsReady ? `<p class="small muted">أضف رقمك بصيغته الدولية، ثم أدخل رمز الرسالة.</p><form data-form="phone-send">${errors()}${field("phone", "رقم الجوال", "tel", 'required placeholder="+9665XXXXXXXX" autocomplete="tel"')}<button class="btn secondary" type="submit">إرسال رمز التحقق</button></form>${state.challenge ? `<form class="spaced" data-form="phone-check">${errors()}${field("code", "رمز التحقق", "text", 'required inputmode="numeric" autocomplete="one-time-code" minlength="4" maxlength="10"')}<button class="btn" type="submit">تأكيد الرقم</button></form>` : ""}` : '<p class="muted">التحقق برسائل الجوال غير مفعّل حاليًا. الدخول برقم الجوال وكلمة المرور متاح؛ الرقم لا يُعتبر موثّقًا عبر SMS.</p>'}</section></div>`,
+    `${pageHead("إعدادات الإدارة", "بيانات فريق انطلاقة ومعلومات العقود والدفع.")}<div class="two-col"><section class="panel"><h2>حساب الإدارة</h2><div class="key-values"><div><span>الاسم</span><strong>${E(state.user.name)}</strong></div><div><span>البريد</span><strong>${E(state.user.email)}</strong></div><div><span>البيئة</span><strong>${E(state.config?.environment || "—")}</strong></div></div><h3 class="spaced">تغيير كلمة المرور</h3><form data-form="password">${errors()}${field("currentPassword", "كلمة المرور الحالية", "password", 'required autocomplete="current-password" maxlength="128"')}${field("password", "كلمة المرور الجديدة", "password", 'required minlength="12" maxlength="128" autocomplete="new-password"')}<button class="btn" type="submit">حفظ كلمة المرور</button></form></section><section class="panel"><h2>بيانات العقود والدفع</h2><div class="key-values"><div><span>مقدم الخدمة</span><strong>${E(provider.legalName || "غير محدد")}</strong></div><div><span>نوع الوثيقة</span><strong>${E(provider.registrationType || "none")}</strong></div><div><span>رقم الوثيقة</span><strong dir="ltr">${E(provider.registrationNumber || "—")}</strong></div><div><span>النشاط</span><strong>${E(provider.activity || "—")}</strong></div><div><span>البنك</span><strong>${E(state.config?.bankTransfer?.bank || "—")}</strong></div><div><span>الآيبان</span><strong dir="ltr">${E(state.config?.bankTransfer?.iban || "—")}</strong></div></div><p class="small muted spaced">تُدار القيم الحساسة من إعدادات الاستضافة والبيئة، ولا تُعرض مفاتيح الخدمات داخل لوحة التحكم.</p></section></div>`,
   );
 }
+
+async function adminContracts(path) {
+  const orders = (await api("/api/orders?all=1")).filter((o) => o.currentContract);
+  return workspace(
+    path,
+    `${pageHead("العقود", "العقود الحالية وحالة موافقة كل عميل.")}${orders.length ? `<div class="table-wrap"><table><thead><tr><th>الطلب</th><th>العميل</th><th>الإصدار</th><th>القيمة</th><th>الموافقة</th><th></th></tr></thead><tbody>${orders.map((o) => { const q = o.contracts.find((x) => x.id === o.currentContract); return `<tr><td><strong>${E(o.title)}</strong><div class="small muted" dir="ltr">${E(o.number)}</div></td><td>${E(o.customer.name)}</td><td>${q ? q.version : "—"}</td><td>${money(o.amount || 0)}</td><td>${q?.acceptedAt ? "تمت " + date(q.acceptedAt) : "بانتظار العميل"}</td><td><a class="text-link" href="#/order/${o.id}">فتح الطلب</a></td></tr>`; }).join("")}</tbody></table></div>` : empty("لا توجد عقود بعد", "ستظهر العقود بمجرد تجهيزها للطلبات.")}`,
+  );
+}
+async function adminPayments(path) {
+  const orders = (await api("/api/orders?all=1")).filter((o) => o.amount);
+  return workspace(
+    path,
+    `${pageHead("المدفوعات", "متابعة المبالغ المستحقة والمؤكدة وإيصالات التحويل.")}${orders.length ? `<div class="table-wrap"><table><thead><tr><th>الطلب</th><th>العميل</th><th>المبلغ</th><th>الحالة</th><th>الإيصال</th><th></th></tr></thead><tbody>${orders.map((o) => `<tr><td><strong>${E(o.title)}</strong><div class="small muted" dir="ltr">${E(o.number)}</div></td><td>${E(o.customer.name)}</td><td>${money(o.amount)}</td><td>${o.payment?.confirmed && !o.payment.revoked ? "مؤكد" : o.payment?.revoked ? "ملغي" : o.status === "awaiting_payment" ? "بانتظار التحويل" : "لم يصل لمرحلة الدفع"}</td><td>${o.files?.some((f) => f.purpose === "payment_receipt") ? "مرفق" : "—"}</td><td><a class="text-link" href="#/order/${o.id}">فتح</a></td></tr>`).join("")}</tbody></table></div>` : empty("لا توجد مدفوعات بعد", "ستظهر هنا الطلبات التي لها قيمة مالية.")}`,
+  );
+}
+
 async function adminProducts(path) {
   const products = await api("/api/admin/products");
   return workspace(
@@ -769,15 +807,15 @@ async function customers(path) {
   const users = await api("/api/admin/customers");
   return workspace(
     path,
-    `${pageHead("العملاء", "الحسابات المسجلة في المنصة.")}<div class="table-wrap"><table><thead><tr><th>الاسم</th><th>البريد</th><th>الجوال</th><th>تاريخ التسجيل</th></tr></thead><tbody>${
+    `${pageHead("العملاء", "عملاء الطلبات المباشرة والحسابات القديمة، بدون اعتبار الطلب المباشر حسابًا مسجلًا.")}<div class="table-wrap"><table><thead><tr><th>الاسم</th><th>البريد</th><th>الجوال</th><th>النوع</th><th>أول ظهور</th></tr></thead><tbody>${
       users
         .filter((u) => u.role === "customer")
         .map(
           (u) =>
-            `<tr><td>${E(u.name)}</td><td>${E(u.email)}</td><td>${u.phoneVerified ? E(u.phone) : "غير موثّق"}</td><td>${date(u.createdAt)}</td></tr>`,
+            `<tr><td>${E(u.name)}</td><td>${E(u.email)}</td><td>${E(u.phone || "—")}</td><td>${u.guest ? "طلب مباشر" : "حساب قديم"}</td><td>${date(u.createdAt)}</td></tr>`,
         )
         .join("") ||
-      '<tr><td colspan="4">لا توجد حسابات عملاء حتى الآن.</td></tr>'
+      '<tr><td colspan="5">لا توجد بيانات عملاء حتى الآن.</td></tr>'
     }</tbody></table></div>`,
   );
 }
@@ -840,7 +878,7 @@ async function render() {
         "/profile",
       ].includes(path) || /^\/(order|contract|invoice|addons|payment|admin)(\/|$)/.test(path);
     let html;
-    if (privateRoute && !state.user) html = authRequired(raw, path.startsWith("/admin"));
+    if (privateRoute && !state.user && !path.startsWith("/track/")) html = authRequired(raw, path.startsWith("/admin"));
     else if (path.startsWith("/admin") && state.user?.role !== "admin")
       throw Error("هذه المساحة متاحة لإدارة المنصة فقط.");
     else if (path === "/") html = home();
@@ -868,7 +906,10 @@ async function render() {
     } else if (path === "/otp-login")
       html = `<div class="wrap"><div class="checkout">${pageHead("الدخول برمز الجوال", "للأرقام الموثّقة مسبقًا في حساب انطلاقة.")}<section class="panel">${state.config.smsReady ? `<form data-form="otp-send">${errors()}${field("phone", "رقم الجوال", "tel", 'required placeholder="+9665XXXXXXXX" autocomplete="tel"')}<button class="btn" type="submit">إرسال رمز الدخول</button></form>${state.loginChallenge ? `<form data-form="otp-check" class="spaced" data-next="${E(query.get("next") || "/dashboard")}">${errors()}${field("code", "رمز التحقق", "text", 'required inputmode="numeric" autocomplete="one-time-code" minlength="4" maxlength="10"')}<button class="btn" type="submit">تسجيل الدخول</button></form>` : ""}` : "<p>الدخول برمز الجوال غير مفعّل حاليًا.</p>"}<p class="small spaced"><a class="text-link" href="#/login">الدخول بالجوال وكلمة المرور</a></p></section></div></div>`;
     else if (path === "/start") html = start(query);
-    else if (path === "/dashboard" || path === "/admin")
+    else if (path.startsWith("/track/")) {
+      const parts = path.split("/");
+      html = await trackingOrder(path, parts[2], parts[3]);
+    } else if (path === "/dashboard" || path === "/admin")
       html = await dashboard(path);
     else if (path === "/orders" || path === "/admin/orders")
       html = await orderList(path);
@@ -887,8 +928,10 @@ async function render() {
     else if (path.startsWith("/invoice/"))
       html = await invoice(path.split("/")[2]);
     else if (path === "/notifications") html = await notifications(path);
-    else if (path === "/support") html = await support(path);
-    else if (path === "/profile") html = profile(path);
+    else if (path === "/support" || path === "/admin/support") html = await support(path);
+    else if (path === "/admin/contracts") html = await adminContracts(path);
+    else if (path === "/admin/payments") html = await adminPayments(path);
+    else if (path === "/admin/settings") html = await adminSettings(path);
     else if (path === "/admin/products") html = await adminProducts(path);
     else if (path === "/admin/customers") html = await customers(path);
     else if (path === "/terms" || path === "/privacy")
@@ -904,8 +947,8 @@ async function render() {
     if (seq !== state.sequence) return;
     if (e.sessionExpired) {
       header(path);
-      main.innerHTML = authRequired(raw);
-      notify("انتهت جلستك. سجّل الدخول لمتابعة طلبك.");
+      main.innerHTML = authRequired(raw, path.startsWith("/admin"));
+      notify(path.startsWith("/admin") ? "انتهت جلسة الإدارة. سجّل الدخول مجددًا." : "انتهت جلسة المتابعة. افتح رابط متابعة الطلب.");
     } else {
       main.innerHTML = `<div class="wrap section">${empty("تعذر فتح الصفحة", E(e.message), `<button class="btn" data-action="retry">حاول مجددًا</button> ${link("/", "الرئيسية", "secondary")}`)}</div>`;
     }
@@ -1019,6 +1062,7 @@ document.addEventListener("submit", async (event) => {
         method: "POST",
         body: { ...b, type: "service", template: b.service === "ready-website" ? b.template : undefined, addons: b.service === "ready-website" ? ["hosting","domain","deployment"].filter(id => b["addon_"+id]) : [] },
       });
+      if (o.trackingToken) state.trackingTokens[o.id] = o.trackingToken;
       go("/addons/" + o.id);
       notify("تم استلام طلبك. اختر الخدمات الإضافية أو تخطها للانتقال إلى العقد.");
     } else if (kind === "checkout") {
@@ -1034,6 +1078,7 @@ document.addEventListener("submit", async (event) => {
         method: "POST",
         body: { type: "product", productId: oid, promoCode: b.promoCode },
       });
+      if (o.trackingToken) state.trackingTokens[o.id] = o.trackingToken;
       go("/addons/" + o.id);
       notify("تم إنشاء الطلب. اختر الخدمات الإضافية أو تخطها للانتقال إلى العقد.");
     } else if (kind === "checkout-addons" || kind === "checkout-addons-skip") {

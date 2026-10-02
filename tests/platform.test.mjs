@@ -195,6 +195,30 @@ test("service order is owned by session; untrusted amount and paid flags are ign
     404,
   );
 });
+test("order tracking link requires the secret token and restores only its owner session", async () => {
+  assert.match(service.trackingToken, /^[a-f0-9]{36}$/);
+  const wrong = await request(`/api/track/${service.id}/session`, {
+    method: "POST",
+    body: { token: "0".repeat(36) },
+  });
+  assert.equal(wrong.status, 404);
+  const tracked = await request(`/api/track/${service.id}/session`, {
+    method: "POST",
+    body: { token: service.trackingToken },
+  });
+  assert.equal(tracked.status, 200);
+  assert.equal(tracked.data.user.id, alice.user.id);
+  assert.match(tracked.headers.get("set-cookie"), /HttpOnly/);
+  const actor = {
+    ...tracked.data,
+    cookie: tracked.headers.get("set-cookie").split(";")[0],
+  };
+  const order = await request(`/api/orders/${service.id}`, { as: actor });
+  assert.equal(order.status, 200);
+  assert.equal(order.data.trackingTokenHash, undefined);
+  assert.equal(order.data.trackingToken, undefined);
+});
+
 test("only admin may issue quotes; contract versions and acceptance are enforced", async () => {
   const quote = {
     agreement: "تنفيذ موقع كامل وفق وصف الطلب المتفق عليه.",
