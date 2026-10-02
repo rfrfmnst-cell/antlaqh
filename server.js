@@ -311,8 +311,10 @@ async function twilio(path, data) {
 
 if (process.env.BOOTSTRAP_ADMIN_EMAIL && process.env.BOOTSTRAP_ADMIN_PASSWORD) {
   const mail = email(process.env.BOOTSTRAP_ADMIN_EMAIL),
-    uid = digest(mail);
-  if (!(await db.get("user", uid)))
+    uid = digest(mail),
+    bootstrapPassword = password(process.env.BOOTSTRAP_ADMIN_PASSWORD),
+    existingAdmin = await db.get("user", uid);
+  if (!existingAdmin)
     await db.insert(
       "user",
       {
@@ -320,17 +322,30 @@ if (process.env.BOOTSTRAP_ADMIN_EMAIL && process.env.BOOTSTRAP_ADMIN_PASSWORD) {
         name: "إدارة انطلاقة",
         email: mail,
         role: "admin",
-        password: await hashPassword(
-          password(process.env.BOOTSTRAP_ADMIN_PASSWORD),
-        ),
+        password: await hashPassword(bootstrapPassword),
+        passwordVersion: 0,
+        authVersion: 0,
         createdAt: now(),
       },
       uid,
     );
-  else if ((await db.get("user", uid)).role !== "admin")
+  else if (existingAdmin.role !== "admin")
     throw Error(
       "Bootstrap email already belongs to a customer. Choose a new admin email.",
     );
+  else if (!(await checkPassword(bootstrapPassword, existingAdmin.password))) {
+    await db.update("user", uid, (u) => ({
+      ...u,
+      password: null,
+      passwordVersion: (u.passwordVersion || 0) + 1,
+      authVersion: (u.authVersion || 0) + 1,
+    }));
+    const passwordHash = await hashPassword(bootstrapPassword);
+    await db.update("user", uid, (u) => ({
+      ...u,
+      password: passwordHash,
+    }));
+  }
 }
 
 function isDuplicate(error) {
