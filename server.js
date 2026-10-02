@@ -1,5 +1,5 @@
 import http from "node:http";
-import { services, coverKeys, customerJourney } from "./lib/catalog.js";
+import { services, coverKeys, customerJourney, productCheckoutAddonIds } from "./lib/catalog.js";
 import { createAssistant } from "./lib/assistant.js";
 import { isIP } from "node:net";
 import { readFile, writeFile, mkdir, unlink, stat } from "node:fs/promises";
@@ -203,6 +203,36 @@ function safeProduct(p, admin = false) {
 }
 function safeOrder(o) {
   return o;
+}
+function checkoutAllowedAddonIds(order) {
+  if (order.type === "product") return productCheckoutAddonIds;
+  return services.find((service) => service.id === order.service)?.checkoutAddons?.map((addon) => addon.id) || [];
+}
+function checkoutContractDetails(base, selectedAddons = []) {
+  const providerType = ["none", "commercial_registration", "freelance_certificate"].includes(process.env.BUSINESS_REGISTRATION_TYPE)
+    ? process.env.BUSINESS_REGISTRATION_TYPE : "none";
+  const deliverables = [
+    ...(base?.includes || []),
+    ...selectedAddons.flatMap((addon) => addon.includes || [addon.title]),
+  ];
+  return {
+    provider: {
+      legalName: process.env.BUSINESS_LEGAL_NAME || "إنطلاقة للتجارة الإلكترونية",
+      address: process.env.BUSINESS_ADDRESS || "المملكة العربية السعودية",
+      registrationNumber: process.env.BUSINESS_REGISTRATION_NUMBER || "",
+      registrationType: providerType,
+      activity: process.env.BUSINESS_ACTIVITY || "خدمات التجارة الإلكترونية والحلول الرقمية",
+    },
+    deliverables: deliverables.length ? deliverables.join("\n") : "تسليم المنتج أو الخدمة الموضحة في الطلب وفق الوصف والنطاق المنشور.",
+    exclusions: "لا يشمل الاتفاق أعمالًا أو اشتراكات أو رسوم جهات خارجية غير مذكورة صراحة ضمن نطاق الطلب أو الخدمات الإضافية المختارة.",
+    clientRequirements: "تزويد فريق إنطلاقة بالمحتوى والبيانات والصلاحيات اللازمة للتنفيذ في الوقت المناسب، ومراجعة المخرجات ضمن المدد الموضحة.",
+    thirdPartyCosts: "رسوم الجهات الخارجية مثل الاستضافة والدومين والمتاجر الإعلانية أو واجهات API لا تدخل في السعر إلا إذا ظهرت صراحة ضمن الطلب.",
+    revisions: 2,
+    reviewDays: 7,
+    supportDays: 30,
+    ownership: "تنتقل حقوق استخدام المخرجات الخاصة بالعميل بعد سداد المبلغ المتفق عليه، مع بقاء تراخيص وأصول الجهات الخارجية خاضعة لشروط أصحابها.",
+    cancellation: "يعالج الإلغاء والاسترداد وفق حالة التنفيذ والأعمال المنجزة والأنظمة المعمول بها، وتوثق أي تسوية داخل الطلب.",
+  };
 }
 async function saveFile(req) {
   const contentType = (req.headers["content-type"] || "").split(";")[0];
@@ -673,16 +703,13 @@ async function api(req, res, url) {
       const p = await db.get("product", text(b.productId, 1, 80));
       if (!p || !p.published || !p.file)
         throw fail(404, "المنتج غير متاح للشراء.");
-      if (b.acceptTerms !== true)
-        throw fail(400, "وافق على شروط الشراء للمتابعة.");
       o.type = "product";
       o.title = p.title;
       o.productId = p.id;
       o.productFile = p.file;
       Object.assign(o, priceBreakdown(p.amount, promotion));
       o.description = p.description;
-      o.status = "awaiting_payment";
-      o.termsAcceptedAt = now();
+      o.status = "received";
     } else {
       const service = services.find((s) => s.id === b.service);
       if (!service) throw fail(400, "اختر الخدمة المطلوبة.");
@@ -784,6 +811,104 @@ async function api(req, res, url) {
       if (o.type !== "product" || !o.payment?.confirmed || o.payment.revoked)
         throw fail(403, "يتاح التنزيل بعد تأكيد الدفع.");
       return sendFile(res, o.productFile);
+    }
+    if (method === "POST" && action === "checkout-options") {
+      if (auth.u.role !== "admin" && auth.u.id !== o.owner)
+        throw fail(403, "هذه الخطوة متاحة لصاحب الطلب فقط.");
+      const b = await jsonBody(req);
+      const selectedIds = b.addonServiceIds === undefined ? [] : b.addonServiceIds;
+      if (!Array.isArray(selectedIds) || selectedIds.length > 4 ||
+          selectedIds.some((value) => typeof value !== "string") ||
+          new Set(selectedIds).size !== selectedIds.length)
+        throw fail(400, "اختيارات الخدمات الإضافية غير صحيحة.");
+      const allowed = new Set(checkoutAllowedAddonIds(o));
+      if (selectedIds.some((value) => !allowed.has(value)))
+        throw fail(400, "إحدى الخدمات الإضافية غير متاحة لهذا الطلب.");
+      const selectedAddons = selectedIds
+        .map((serviceId) => services.find((service) => service.id === serviceId))
+        .filter(Boolean);
+      const baseService = o.type === "service"
+        ? services.find((service) => service.id === o.service)
+        : null;
+      const baseAmount = o.type === "service"
+        ? baseService?.pricing?.from
+        : (o.subtotal || o.amount);
+      if (!Number.isSafeInteger(baseAmount) || baseAmount < 100)
+        throw fail(409, "تعذر تحديد سعر الطلب الأساسي.");
+      const subtotal = baseAmount + selectedAddons.reduce((sum, addon) => sum + (addon.pricing?.from || 0), 0);
+      const details = checkoutContractDetails(baseService, selectedAddons);
+      const providerDetails = {
+        ...details.provider,
+        email: process.env.BUSINESS_EMAIL || "antlaqh2030@gmail.com",
+        phone: process.env.BUSINESS_PHONE || "+966553575760",
+      };
+      const agreementLines = [
+        o.type === "service"
+          ? `${baseService.title}: ${baseService.pricing.scope}`
+          : `المنتج الرقمي: ${o.title} — ${o.description}`,
+        ...selectedAddons.map((addon) => `${addon.title}: ${addon.pricing.scope}`),
+      ];
+      const q = {
+        id: id(),
+        version: o.contracts.length + 1,
+        agreement: agreementLines.join("\n\n"),
+        subtotal,
+        deliveryDate: o.targetDate && /^\d{4}-\d{2}-\d{2}$/.test(o.targetDate) ? o.targetDate : null,
+        terms: "أقر العميل بأنه راجع وصف الطلب والخدمات الإضافية والسعر والشروط والأحكام، وأن التنفيذ يبدأ بعد تأكيد استلام الدفع واستكمال متطلبات البدء.",
+        parties: {
+          provider: details.provider.legalName,
+          customer: { ...o.customer },
+        },
+        providerDetails,
+        currency: "SAR",
+        createdAt: now(),
+        acceptedAt: null,
+      };
+      Object.assign(q, priceBreakdown(q.subtotal, o.promotion));
+      q.promotion = o.promotion || null;
+      q.document = createContractDocument(details, {
+        ...q,
+        contact: providerDetails,
+        customer: o.customer,
+        siteOptions: o.siteOptions,
+        serviceDetails: baseService,
+        selectedAddons,
+        requestDetails: {
+          title: o.title,
+          description: o.description,
+          budget: o.budget || "",
+          targetDate: o.targetDate || "",
+        },
+      });
+      q.fingerprint = digest(JSON.stringify({
+        id: q.id, version: q.version, agreement: q.agreement,
+        subtotal: q.subtotal, discount: q.discount, amount: q.amount,
+        promotion: q.promotion, deliveryDate: q.deliveryDate, terms: q.terms,
+        parties: q.parties, providerDetails: q.providerDetails,
+        document: q.document, currency: q.currency,
+      }));
+      const result = await db.update("order", oid, (x) => {
+        if (!["received", "reviewing", "quoted"].includes(x.status))
+          throw fail(409, "لا يمكن تعديل إضافات هذا الطلب بعد اعتماد العقد أو بدء الدفع.");
+        if (x.payment?.confirmed && !x.payment.revoked)
+          throw fail(409, "لا يمكن تعديل طلب مدفوع.");
+        q.version = x.contracts.length + 1;
+        x.checkoutAddons = selectedAddons.map((addon) => ({
+          id: addon.id,
+          title: addon.title,
+          description: addon.description,
+          pricing: { ...addon.pricing },
+        }));
+        x.contracts.push(q);
+        x.currentContract = q.id;
+        x.subtotal = q.subtotal;
+        x.discount = q.discount;
+        x.amount = q.amount;
+        x.status = "quoted";
+        event(x, selectedAddons.length ? "اختار العميل الخدمات الإضافية وتم تجهيز العقد" : "تخطى العميل الخدمات الإضافية وتم تجهيز العقد", auth.u);
+        return x;
+      });
+      return json(res, 200, safeOrder(result));
     }
     if (method === "POST" && action === "quote") {
       authorize(auth, true);
