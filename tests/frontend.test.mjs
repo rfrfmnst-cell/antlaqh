@@ -17,7 +17,7 @@ const response = (data, status = 200) => ({
   json: async () => data,
 });
 
-test("ready websites expose real previews and preserve template and promotion through login", async () => {
+test("ready websites preserve template and promotion without customer login", async () => {
   const start = new Date(Date.now()-1000).toISOString(), end = new Date(Date.now()+86400000).toISOString();
   const settings = { ...config,services,customerJourney,launchOffer:{code:"ANTLAQH20",ratePercent:20,active:true,startsAt:start,endsAt:end,terms:[]} };
   const ui = await app({hash:"#/ready-websites",settings});
@@ -26,10 +26,9 @@ test("ready websites expose real previews and preserve template and promotion th
   assert.match(ui.nodes.get("#footer").innerHTML,/التحويل البنكي هو وسيلة الدفع الوحيدة/);
   ui.location.hash="#/start?service=ready-website&template=portfolio&promo=ANTLAQH20";
   await ui.render();
-  assert.match(ui.nodes.get("#main").innerHTML,/template%3Dportfolio/);
-  assert.match(ui.nodes.get("#main").innerHTML,/promo%3DANTLAQH20/);
-  ui.state.user=user;
-  await ui.render();
+  assert.match(ui.nodes.get("#main").innerHTML,/name="customerName"/);
+  assert.match(ui.nodes.get("#main").innerHTML,/name="customerPhone"/);
+  assert.match(ui.nodes.get("#main").innerHTML,/name="customerEmail"/);
   assert.match(ui.nodes.get("#main").innerHTML,/value="portfolio" selected/);
   assert.match(ui.nodes.get("#main").innerHTML,/name="addon_hosting"/);
   assert.match(ui.nodes.get("#main").innerHTML,/name="promoCode"[^>]*value="ANTLAQH20"/);
