@@ -15,6 +15,7 @@ const state = {
   resetToken: "",
   resetExpiresAt: 0,
   recoveryOperation: 0,
+  trackingTokens: Object.create(null),
 };
 const escape = (value) =>
   String(value ?? "").replace(
@@ -322,8 +323,7 @@ function logo(compact = false) {
   return `<a class="brand ${compact ? "brand-footer" : ""}" href="#/" aria-label="إنطلاقة للتجارة الإلكترونية، الصفحة الرئيسية"><img class="brand-logo" src="/assets/brand-logo-transparent.png" alt="شعار إنطلاقة" width="112" height="96"><span class="brand-name">إنطلاقة<span>للتجارة الإلكترونية</span></span></a>`;
 }
 function header(path) {
-  const authed = !!state.user,
-    admin = state.user?.role === "admin";
+  const admin = state.user?.role === "admin";
   const businessPhone = state.config?.businessPhone || "+966553575760";
   const businessEmail = state.config?.businessEmail || "antlaqh2030@gmail.com";
   const phoneLabel = businessPhone === "+966553575760" ? "0553575760" : businessPhone;
@@ -340,7 +340,7 @@ function header(path) {
       )
       .join(
         "",
-      )}</nav><div class="header-actions">${authed ? `<a class="user-chip" href="#${admin ? "/admin" : "/dashboard"}"><span class="avatar">${E(state.user.name.slice(0, 1))}</span><span class="user-name">${E(state.user.name.split(" ")[0])}</span></a>` : ""}${link("/start", "ابدأ مشروعك " + icon("arrow"), "header-start")}<button class="btn ghost menu-button" data-action="menu" aria-label="فتح القائمة" aria-expanded="false" aria-controls="main-nav">${icon("menu")}</button></div></div>`;
+      )}</nav><div class="header-actions">${admin ? `<a class="user-chip" href="#/admin"><span class="avatar">${E(state.user.name.slice(0, 1))}</span><span class="user-name">${E(state.user.name.split(" ")[0])}</span></a>` : ""}${link("/start", "ابدأ مشروعك " + icon("arrow"), "header-start")}<button class="btn ghost menu-button" data-action="menu" aria-label="فتح القائمة" aria-expanded="false" aria-controls="main-nav">${icon("menu")}</button></div></div>`;
   $("#footer").innerHTML =
     `<div class="wrap footer-cta"><div><span class="footer-eyebrow">خطوتك القادمة تبدأ هنا</span><h2>فكرتك تستحق انطلاقة.</h2><p>لنحوّل ما تتخيّله إلى حضور رقمي يعبّر عن مشروعك.</p></div><a class="btn footer-start" href="#/start">ابدأ مشروعك ${icon("arrow")}</a></div><div class="wrap footer-top"><div class="footer-brand">${logo(true)}<p>نصنع لمشروعك بداية مدروسة، وحضورًا رقميًا يعبّر عنه. من أول فكرة إلى تجربة تستحق أن تُشارك.</p><span class="footer-signature">بدايات مدروسة. أثر مستمر.</span></div><div class="footer-column"><h3>اكتشف انطلاقة</h3><nav aria-label="اكتشف انطلاقة"><a href="#/services">حلولنا الرقمية</a><a href="#/store">المتجر الرقمي</a><a href="#/ready-websites">المواقع الجاهزة</a><a href="#/launch-offer">عرض الإطلاق</a><a href="#/about">قصتنا وطريقتنا</a></nav></div><div class="footer-column"><h3>المساعدة والمتابعة</h3><nav aria-label="المساعدة والمتابعة"><a href="#/start">ابدأ أو تابع طلبك</a><a href="#/support">الدعم والمساعدة</a><button type="button" data-assistant-open>مساعد انطلاقة ${icon("spark")}</button><a href="#/terms">الشروط والأحكام</a><a href="#/privacy">سياسة الخصوصية</a>${state.config?.integrations?.ga4MeasurementId ? `<button type="button" data-analytics-settings>خيارات قياس الزيارات</button>` : ""}</nav></div><div class="footer-column footer-reach"><h3>لنتحدث عن مشروعك</h3><p>نحن بالقرب منك، من أول سؤال إلى الخطوة التالية.</p><div class="footer-contact"><a href="tel:${E(businessPhone)}"><span>اتصل بنا</span><b dir="ltr">${E(phoneLabel)}</b></a><a href="mailto:${E(businessEmail)}"><span>البريد الإلكتروني</span><b dir="ltr">${E(businessEmail)}</b></a>${whatsappLink("تواصل عبر WhatsApp","text-link")}</div></div></div><div class="wrap footer-utility"><div class="footer-payment"><span class="footer-eyebrow">الدفع بعد الاتفاق</span><div>${icon("globe")}<strong>تحويل بنكي</strong></div><p>التحويل البنكي هو وسيلة الدفع الوحيدة حاليًا.</p></div>${shareLinks()}</div><div class="wrap footer-bottom"><span>© ${new Date().getFullYear()} إنطلاقة للتجارة الإلكترونية. جميع الحقوق محفوظة.</span><a href="#/">العودة للرئيسية ${icon("arrow")}</a></div><a class="floating-contact" href="https://wa.me/966553575760?text=${encodeURIComponent("مرحبًا انطلاقة، أود الاستفسار عن خدماتكم.")}" target="_blank" rel="noopener noreferrer" aria-label="راسل انطلاقة عبر WhatsApp على ${E(phoneLabel)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 3h4l2 5-3 2c2 3 3 4 6 6l2-3 5 2v4c0 1-1 2-2 2C10 21 3 14 3 5c0-1 1-2 2-2Z"/></svg><span>راسلنا على WhatsApp</span></a>`;
 }
@@ -457,29 +457,23 @@ function home() {
 function pageHead(title, subtitle = "", action = "") {
   return `<div class="page-head"><div><h1>${title}</h1>${subtitle ? `<p>${subtitle}</p>` : ""}</div>${action}</div>`;
 }
-function sidebar(path, admin = false) {
-  const items = admin
-    ? [
-        ["/admin", "نظرة عامة", "grid"],
-        ["/admin/orders", "الطلبات", "bag"],
-        ["/admin/products", "المنتجات الرقمية", "file"],
-        ["/admin/customers", "العملاء", "user"],
-        ["/support", "تذاكر الدعم", "message"],
-        ["/profile", "حسابي", "user"],
-      ]
-    : [
-        ["/dashboard", "نظرة عامة", "grid"],
-        ["/orders", "طلباتي", "bag"],
-        ["/contracts", "عقودي", "file"],
-        ["/invoices", "المدفوعات", "file"],
-        ["/notifications", "التحديثات", "bell"],
-        ["/support", "الدعم والمساعدة", "message"],
-        ["/profile", "إعدادات الحساب", "user"],
-      ];
-  return `<aside class="sidebar" aria-label="قائمة الحساب"><div class="sidebar-label">${admin ? "إدارة المنصة" : "مساحتك في انطلاقة"}</div>${items.map(([p, l, i]) => `<a href="#${p}" class="${path === p ? "active" : ""}" ${path === p ? 'aria-current="page"' : ""}>${icon(i)}${l}</a>`).join("")}<div class="divider"></div><button data-action="logout">${icon("logout")}تسجيل الخروج</button></aside>`;
+function sidebar(path) {
+  const items = [
+    ["/admin", "نظرة عامة", "grid"],
+    ["/admin/orders", "الطلبات", "bag"],
+    ["/admin/contracts", "العقود", "file"],
+    ["/admin/payments", "المدفوعات", "file"],
+    ["/admin/customers", "العملاء", "user"],
+    ["/admin/products", "المنتجات الرقمية", "file"],
+    ["/admin/support", "الدعم والمحادثات", "message"],
+    ["/admin/settings", "الإعدادات", "user"],
+  ];
+  return `<aside class="sidebar" aria-label="لوحة إدارة انطلاقة"><div class="sidebar-label">فريق انطلاقة</div>${items.map(([p, l, i]) => `<a href="#${p}" class="${path === p ? "active" : ""}" ${path === p ? 'aria-current="page"' : ""}>${icon(i)}${l}</a>`).join("")}<div class="divider"></div><button data-action="logout">${icon("logout")}تسجيل خروج الإدارة</button></aside>`;
 }
 function workspace(path, content) {
-  return `<div class="wrap workspace">${sidebar(path, state.user.role === "admin")}<div class="workspace-content">${content}</div></div>`;
+  if (state.user?.role !== "admin")
+    return `<div class="wrap"><div class="workspace-content">${content}</div></div>`;
+  return `<div class="wrap workspace">${sidebar(path)}<div class="workspace-content">${content}</div></div>`;
 }
 function authPage(register, query) {
   const emailLogin = query.get("method") === "email" || (query.get("next") || "").startsWith("/admin");
