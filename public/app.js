@@ -514,7 +514,8 @@ function authRequired(next) {
 }
 function start(query) {
   const selected = query.get("service") || "";
-  return `<div class="wrap">${pageHead("ابدأ مشروعك الإلكتروني", "كل مشروع ناجح يبدأ بفهم الفكرة. أخبرنا بما تخطط له.")}<div class="two-col"><section class="panel"><form data-form="start">${errors()}<div class="field"><label for="service">ما الخدمة التي تحتاجها؟</label><select id="service" name="service" required><option value="">اختر الخدمة</option>${state.config.services.map((s) => `<option value="${s.id}" ${s.id === selected ? "selected" : ""}>${s.title}</option>`).join("")}</select></div>${readySiteOptions(query,selected)}${field("title", "اسم المشروع أو عنوان الطلب", "text", 'required minlength="3" maxlength="160" placeholder="مثل: متجر لمنتجات العناية"')}${textarea("description", "حدّثنا عن فكرتك", 'required minlength="15" maxlength="8000" placeholder="ما الذي تريد بناءه؟ من سيستخدمه؟ وما أهم ما تتوقعه؟"')}<div class="form-grid">${field("budget", "الميزانية المتوقعة (اختياري)", "text", 'maxlength="100" placeholder="مثل: من 5,000 إلى 10,000 ر.س"')}${field("targetDate", "موعد الإطلاق المستهدف (اختياري)", "date")}</div>${promoField()}<button class="btn" type="submit">إرسال طلب المشروع</button></form></section><aside><section class="panel"><div class="service-icon">${icon("spark")}</div><h2>ماذا يحدث بعد الإرسال؟</h2><ol class="feature-list"><li><strong>01</strong> نراجع الفكرة والتفاصيل.</li><li><strong>02</strong> نتواصل معك لاستكمال المتطلبات.</li><li><strong>03</strong> يصلك عرض سعر وعقد للمراجعة.</li><li><strong>04</strong> نبدأ التنفيذ بعد الاتفاق وتأكيد الدفع.</li></ol></section><div class="notice">إرسال الطلب لا يلزمك بالدفع. ستراجع نطاق العمل والسعر قبل الموافقة.</div></aside></div></div>`;
+  const contact = state.user ? "" : `<div class="form-grid">${field("customerName", "الاسم", "text", 'required minlength="2" maxlength="100" autocomplete="name"')}${field("customerPhone", "رقم الجوال", "tel", 'required minlength="9" maxlength="16" autocomplete="tel" placeholder="05XXXXXXXX"')}</div>${field("customerEmail", "البريد الإلكتروني", "email", 'required maxlength="254" autocomplete="email"')}`;
+  return `<div class="wrap">${pageHead("ابدأ مشروعك الإلكتروني", "بدون تسجيل دخول. أدخل بيانات التواصل واحتياجك وسننقلك مباشرة إلى متابعة الطلب والعقد والدفع.")}<div class="two-col"><section class="panel"><form data-form="start">${errors()}${contact}<div class="field"><label for="service">ما الخدمة التي تحتاجها؟</label><select id="service" name="service" required><option value="">اختر الخدمة</option>${state.config.services.map((s) => `<option value="${s.id}" ${s.id === selected ? "selected" : ""}>${s.title}</option>`).join("")}</select></div>${readySiteOptions(query,selected)}${field("title", "اسم المشروع أو عنوان الطلب", "text", 'required minlength="3" maxlength="160" placeholder="مثل: متجر لمنتجات العناية"')}${textarea("description", "حدّثنا عن فكرتك", 'required minlength="15" maxlength="8000" placeholder="ما الذي تريد بناءه؟ من سيستخدمه؟ وما أهم ما تتوقعه؟"')}<div class="form-grid">${field("budget", "الميزانية المتوقعة (اختياري)", "text", 'maxlength="100" placeholder="مثل: من 5,000 إلى 10,000 ر.س"')}${field("targetDate", "موعد الإطلاق المستهدف (اختياري)", "date")}</div>${promoField()}<button class="btn" type="submit">متابعة الطلب</button></form></section><aside><section class="panel"><div class="service-icon">${icon("spark")}</div><h2>المسار المباشر</h2><ol class="feature-list"><li><strong>01</strong> ترسل احتياجك دون إنشاء حساب.</li><li><strong>02</strong> نراجع التفاصيل ونجهز العرض.</li><li><strong>03</strong> تراجع العقد وتوافق عليه.</li><li><strong>04</strong> تنتقل للدفع ثم تتابع التنفيذ.</li></ol></section><div class="notice">لن نطلب منك كلمة مرور لبدء الطلب.</div></aside></div></div>`;
 }
 function ordersTable(orders, admin = false) {
   if (!orders.length)
@@ -805,7 +806,6 @@ async function render() {
     header(path);
     const privateRoute =
       [
-        "/start",
         "/dashboard",
         "/orders",
         "/contracts",
@@ -976,12 +976,20 @@ document.addEventListener("submit", async (event) => {
           : "تم تسجيل الدخول.",
       );
     } else if (kind === "start") {
+      if (!state.user) {
+        const guest = await api("/api/auth/guest", {
+          method: "POST",
+          body: { name: b.customerName, email: b.customerEmail, phone: b.customerPhone },
+        });
+        state.user = guest.user;
+        state.csrf = guest.csrf;
+      }
       const o = await api("/api/orders", {
         method: "POST",
         body: { ...b, type: "service", template: b.service === "ready-website" ? b.template : undefined, addons: b.service === "ready-website" ? ["hosting","domain","deployment"].filter(id => b["addon_"+id]) : [] },
       });
       go("/order/" + o.id);
-      notify("تم إرسال طلبك وحفظه في حسابك.");
+      notify("تم استلام طلبك. ستتابع العقد والدفع والتنفيذ من هذه الصفحة دون تسجيل دخول.");
     } else if (kind === "checkout") {
       const o = await api("/api/orders", {
         method: "POST",
