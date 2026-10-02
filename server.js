@@ -408,6 +408,7 @@ async function api(req, res, url) {
       payments: "bank_transfer",
       bankTransfer: { bank: "البنك الأهلي السعودي", iban: "SA3610000044000001058010", currency: "SAR" },
       environment: production ? "production" : "development",
+      siteOrigin: origin,
     });
   if (method === "POST" && path === "/api/assistant") {
     rate(`assistant:${ip}`, 8, 5 * 60 * 1000);
@@ -421,6 +422,19 @@ async function api(req, res, url) {
       200,
       auth ? { user: publicUser(auth.u), csrf: auth.s.csrf } : { user: null },
     );
+  if (method === "POST" && trackingSessionMatch) {
+    rate(`track-session:${ip}`, 30);
+    const oid = trackingSessionMatch[1];
+    const b = await jsonBody(req);
+    const token = text(b.token, 20, 120);
+    const order = await db.get("order", oid);
+    if (!order || !order.trackingTokenHash || digest(token) !== order.trackingTokenHash)
+      throw fail(404, "رابط متابعة الطلب غير صالح.");
+    const user = await db.get("user", order.owner);
+    if (!user || user.disabled || user.role !== "customer")
+      throw fail(404, "رابط متابعة الطلب غير صالح.");
+    return json(res, 200, await login(res, user));
+  }
   if (method === "POST" && path === "/api/auth/recovery/request") {
     rate(`recovery-request:${ip}`, 12);
     return json(res, 200, await recovery.request(await jsonBody(req)));
