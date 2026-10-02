@@ -1,0 +1,39 @@
+name: Verify production 5.4.3
+
+on:
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Antlaqh production
+        shell: bash
+        run: |
+          set -u
+          for attempt in 1 2 3 4 5 6 7 8; do
+            echo "Attempt $attempt"
+            BODY="$(curl -sS --connect-timeout 15 --max-time 30 -w "\nHTTP_STATUS:%{http_code}" https://antlaqh.com/api/health || true)"
+            echo "$BODY"
+            STATUS="$(printf '%s' "$BODY" | sed -n 's/^HTTP_STATUS://p' | tail -1)"
+            JSON="$(printf '%s' "$BODY" | sed '/^HTTP_STATUS:/d')"
+            if [ "$STATUS" = "200" ]; then
+              export JSON
+              python - <<'PY'
+          import json, os, sys
+          try:
+              data=json.loads(os.environ["JSON"])
+          except Exception:
+              sys.exit(2)
+          print("status:", data.get("status"))
+          print("version:", data.get("version"))
+          print("databaseMode:", data.get("databaseMode"))
+          print("databaseFallback:", data.get("databaseFallback"))
+          sys.exit(0 if data.get("status") == "ok" and data.get("version") == "5.4.3" else 3)
+          PY
+              if [ "$?" -eq 0 ]; then exit 0; fi
+            fi
+            sleep 15
+          done
+          exit 1
