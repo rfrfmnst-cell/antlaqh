@@ -130,10 +130,11 @@ test("structured contracts require provider and scope details and display a save
   assert.match(html,/#\/contract\/test-order\/contract-old/);
 });
 
-test("contract documents require login and preserve the requested version", async () => {
+test("contract documents require an active follow-up session without customer login", async () => {
   const ui = await app({hash:"#/contract/private-order/saved-version"});
-  assert.match(ui.nodes.get("#main").innerHTML,/تسجيل الدخول/);
-  assert.match(ui.nodes.get("#main").innerHTML,/next=%2Fcontract%2Fprivate-order%2Fsaved-version/);
+  assert.match(ui.nodes.get("#main").innerHTML,/جلسة المتابعة غير متاحة/);
+  assert.match(ui.nodes.get("#main").innerHTML,/ابدأ طلبًا/);
+  assert.doesNotMatch(ui.nodes.get("#main").innerHTML,/إنشاء حساب/);
   assert.equal(ui.requests.some(r=>r.path.includes("private-order")),false);
 });
 
@@ -166,15 +167,15 @@ test("initial connection failure offers a retry that reloads config and session"
   assert.match(ui.nodes.get("#main").innerHTML, /homepage-assistant/);
 });
 
-test("an expired session clears account state and preserves the requested route for login", async () => {
+test("an expired customer session clears account state without restoring customer login", async () => {
   const ui = await app({ hash: "#/orders", session: { user, csrf: "expired" }, fetch(path) {
     if (path === "/api/orders") return response({ error: "يلزم تسجيل الدخول." }, 401);
   } });
   assert.equal(ui.state.user, null);
   assert.equal(ui.state.csrf, "");
-  assert.match(ui.nodes.get("#main").innerHTML, /\/login\?next=%2Forders/);
-  assert.match(ui.nodes.get("#header").innerHTML, /login-link/);
-  assert.doesNotMatch(ui.nodes.get("#header").innerHTML, /user-chip/);
+  assert.match(ui.nodes.get("#main").innerHTML, /جلسة المتابعة غير متاحة/);
+  assert.match(ui.nodes.get("#main").innerHTML, /ابدأ طلبًا/);
+  assert.doesNotMatch(ui.nodes.get("#header").innerHTML, /login-link|user-chip/);
 });
 
 test("a successful response with invalid JSON is retried instead of caching broken configuration", async () => {
