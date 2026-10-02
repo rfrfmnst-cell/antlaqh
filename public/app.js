@@ -597,7 +597,7 @@ async function contractDocument(oid, cid) {
   const o = await api("/api/orders/" + oid);
   const q = o.contracts.find(q => q.id === cid);
   if (!q) throw Error("نسخة العقد غير موجودة.");
-  return `<div class="wrap"><article class="panel printable-contract"><div class="eyebrow">انطلاقة · سجل تعاقد</div><h1>عقد ${E(o.title)}</h1>${contractCard(q,o,true)}<div class="button-row spaced no-print"><button class="btn" data-action="print">طباعة أو حفظ PDF</button>${link("/order/"+o.id,"العودة إلى الطلب","secondary")}</div></article></div>`;
+  return `<div class="wrap"><article class="panel printable-contract"><div class="eyebrow">انطلاقة · سجل تعاقد</div><h1>عقد ${E(o.title)}</h1>${contractCard(q,o,false)}<div class="button-row spaced no-print"><button class="btn" data-action="print">طباعة أو حفظ PDF</button>${link("/order/"+o.id,"العودة إلى الطلب","secondary")}</div></article></div>`;
 }
 function paymentCard(o) {
   if (!o.amount) return "";
@@ -652,15 +652,38 @@ async function orderDetail(path, oid) {
 }
 async function store() {
   const products = await api("/api/products");
-  return `<div class="wrap"><section class="store-intro"><div><div class="eyebrow">متجر إنطلاقة</div><h1>اختيارات تصنع<br><em>بدايتك القادمة.</em></h1><p>حلول رقمية وموارد عملية، يجمعها هدف واحد: أن تمنح مشروعك ما يحتاجه لينمو.</p><a class="text-link" href="#/start">تحتاج حلًا مخصصًا؟ لنتحدث ${icon("arrow")}</a></div><div class="store-feature"><img src="/assets/catalog-content.webp" alt="تصور إبداعي لموارد رقمية بهوية إنطلاقة" width="1024" height="1024"><span>صُمّم لفكرتك. اختير لخطوتك.</span></div></section>${launchBanner()}<section class="panel ready-site-callout"><span class="eyebrow">منتج جديد</span><h2>مواقع جاهزة تُخصّص لمشروعك.</h2><p>ثلاثة نماذج فعلية؛ مع خيارات الاستضافة والدومين والرفع.</p>${link("/ready-websites", "اختر موقعك الجاهز")}</section><section class="collections-section"><div class="section-head"><div><div class="eyebrow">مسارات تبدأ من احتياجك</div><h2>اكتشف عالم إنطلاقة.</h2></div><span class="small muted">خدمات تُنفّذ حسب طلبك</span></div><div class="collection-grid">${state.config.services.map((s) => `<a class="collection-card" href="#/service/${E(s.id)}"><img src="${(artwork[s.id] || artwork.website).image}" alt="" loading="lazy" width="1024" height="1024"><div><span>${E(s.title)}</span>${icon("arrow")}</div></a>`).join("")}</div></section><section class="section" aria-labelledby="digital-products"><div class="section-head"><div><div class="eyebrow">موارد لمشروعك</div><h2 id="digital-products">المنتجات الرقمية</h2></div>${products.length ? `<label class="catalog-search">${icon("search")}<input type="search" data-product-search placeholder="ابحث عن منتج…" aria-label="البحث في المنتجات الرقمية"></label>` : ""}</div>${products.length ? `<div class="catalog-toolbar"><span>${products.length.toLocaleString("ar-SA")} منتج متاح</span><span>تجد ملفات مشترياتك داخل حسابك</span></div><div class="three-col product-grid">${products.map((p) => `<article class="product-card" data-product-text="${E((p.title + " " + p.category + " " + p.description).toLowerCase())}">${productImage(p)}<div class="product-body"><h3>${E(p.title)}</h3><p class="pre">${E(p.description)}</p><div class="product-bottom"><div class="price">${money(p.amount)}</div>${link("/checkout/" + p.id, "التفاصيل " + icon("arrow"), "secondary small")}</div></div></article>`).join("")}</div><div class="empty catalog-no-results" hidden><h3>لم نجد منتجًا بهذا الاسم</h3><p>جرّب كلمة أخرى أو تصفّح جميع المنتجات.</p></div>` : `<div class="catalog-empty"><div class="catalog-empty-visual">${icon("bag")}<span>CURATED FOR YOUR NEXT CHAPTER</span></div><div><span class="eyebrow">شيء يستحق الانتظار</span><h3>نجهّز رفوفنا الرقمية.</h3><p>لم تُنشر منتجات للبيع بعد. وحتى تكتمل المجموعة، يمكنك طلب حل مصمّم خصيصًا لمشروعك.</p>${link("/services", "اكتشف حلولنا " + icon("arrow"), "secondary")}</div></div>`}</section><section class="assistant-callout"><div class="assistant-orb">${icon("spark")}</div><div><h2>تبحث عن الاختيار المناسب؟</h2><p>تحدث مع مساعد انطلاقة عن احتياجك وخطوتك القادمة.</p></div><button class="btn secondary" type="button" data-assistant-open>ساعدني في الاختيار ${icon("arrow")}</button></section></div>`;
+  return `<div class="wrap"><section class="store-intro"><div><div class="eyebrow">متجر إنطلاقة</div><h1>اختيارات تصنع<br><em>بدايتك القادمة.</em></h1><p>حلول رقمية وموارد عملية، يجمعها هدف واحد: أن تمنح مشروعك ما يحتاجه لينمو.</p><a class="text-link" href="#/start">تحتاج حلًا مخصصًا؟ لنتحدث ${icon("arrow")}</a></div><div class="store-feature"><img src="/assets/catalog-content.webp" alt="تصور إبداعي لموارد رقمية بهوية إنطلاقة" width="1024" height="1024"><span>صُمّم لفكرتك. اختير لخطوتك.</span></div></section>${launchBanner()}<section class="panel ready-site-callout"><span class="eyebrow">منتج جديد</span><h2>مواقع جاهزة تُخصّص لمشروعك.</h2><p>ثلاثة نماذج فعلية؛ مع خيارات الاستضافة والدومين والرفع.</p>${link("/ready-websites", "اختر موقعك الجاهز")}</section><section class="collections-section"><div class="section-head"><div><div class="eyebrow">مسارات تبدأ من احتياجك</div><h2>اكتشف عالم إنطلاقة.</h2></div><span class="small muted">خدمات تُنفّذ حسب طلبك</span></div><div class="collection-grid">${state.config.services.map((s) => `<a class="collection-card" href="#/service/${E(s.id)}"><img src="${(artwork[s.id] || artwork.website).image}" alt="" loading="lazy" width="1024" height="1024"><div><span>${E(s.title)}</span>${icon("arrow")}</div></a>`).join("")}</div></section><section class="section" aria-labelledby="digital-products"><div class="section-head"><div><div class="eyebrow">موارد لمشروعك</div><h2 id="digital-products">المنتجات الرقمية</h2></div>${products.length ? `<label class="catalog-search">${icon("search")}<input type="search" data-product-search placeholder="ابحث عن منتج…" aria-label="البحث في المنتجات الرقمية"></label>` : ""}</div>${products.length ? `<div class="catalog-toolbar"><span>${products.length.toLocaleString("ar-SA")} منتج متاح</span><span>تتابع مشترياتك مباشرة بعد الطلب</span></div><div class="three-col product-grid">${products.map((p) => `<article class="product-card" data-product-text="${E((p.title + " " + p.category + " " + p.description).toLowerCase())}">${productImage(p)}<div class="product-body"><h3>${E(p.title)}</h3><p class="pre">${E(p.description)}</p><div class="product-bottom"><div class="price">${money(p.amount)}</div>${link("/checkout/" + p.id, "التفاصيل " + icon("arrow"), "secondary small")}</div></div></article>`).join("")}</div><div class="empty catalog-no-results" hidden><h3>لم نجد منتجًا بهذا الاسم</h3><p>جرّب كلمة أخرى أو تصفّح جميع المنتجات.</p></div>` : `<div class="catalog-empty"><div class="catalog-empty-visual">${icon("bag")}<span>CURATED FOR YOUR NEXT CHAPTER</span></div><div><span class="eyebrow">شيء يستحق الانتظار</span><h3>نجهّز رفوفنا الرقمية.</h3><p>لم تُنشر منتجات للبيع بعد. وحتى تكتمل المجموعة، يمكنك طلب حل مصمّم خصيصًا لمشروعك.</p>${link("/services", "اكتشف حلولنا " + icon("arrow"), "secondary")}</div></div>`}</section><section class="assistant-callout"><div class="assistant-orb">${icon("spark")}</div><div><h2>تبحث عن الاختيار المناسب؟</h2><p>تحدث مع مساعد انطلاقة عن احتياجك وخطوتك القادمة.</p></div><button class="btn secondary" type="button" data-assistant-open>ساعدني في الاختيار ${icon("arrow")}</button></section></div>`;
 }
 
 async function checkout(pid) {
   const products = await api("/api/products"),
     p = products.find((p) => p.id === pid);
   if (!p) throw Error("المنتج غير متاح حاليًا.");
-  return `<div class="wrap"><div class="checkout">${pageHead("مراجعة طلب المنتج", "راجع تفاصيل المنتج قبل إنشاء الطلب.")}<section class="panel">${productImage(p, "checkout-cover")}<h2>${E(p.title)}</h2><p class="pre">${E(p.description)}</p><div class="invoice-total"><span>الإجمالي</span><span>${money(p.amount)}</span></div><form class="spaced" data-form="checkout" data-id="${p.id}">${errors()}${promoField()}<div class="notice">ينشئ هذا الزر طلب شراء فقط. الدفع بتحويل بنكي لـ${E(state.config?.bankTransfer?.bank || "البنك الأهلي السعودي")} مع إرفاق الإيصال داخل الطلب. يُتاح التنزيل بعد تأكيد الإدارة استلام المبلغ.</div><label class="check"><input name="acceptTerms" type="checkbox" required><span>اطلعت على وصف المنتج والسعر و<a href="#/terms" target="_blank" rel="noopener">شروط الشراء</a> وأوافق عليها.</span></label><button class="btn" type="submit">إنشاء طلب الشراء</button></form></section></div></div>`;
+  const contact = state.user ? "" : `<div class="form-grid">${field("customerName", "الاسم", "text", 'required minlength="2" maxlength="100" autocomplete="name"')}${field("customerPhone", "رقم الجوال", "tel", 'required minlength="9" maxlength="16" autocomplete="tel" placeholder="05XXXXXXXX"')}</div>${field("customerEmail", "البريد الإلكتروني", "email", 'required maxlength="254" autocomplete="email"')}`;
+  return `<div class="wrap"><div class="checkout">${pageHead("اختيار المنتج", "أدخل بيانات التواصل ثم انتقل إلى الخدمات الإضافية قبل العقد والدفع.")}<section class="panel">${productImage(p, "checkout-cover")}<h2>${E(p.title)}</h2><p class="pre">${E(p.description)}</p><div class="invoice-total"><span>سعر المنتج</span><span>${money(p.amount)}</span></div><form class="spaced" data-form="checkout" data-id="${p.id}">${errors()}${contact}${promoField()}<div class="notice">لن نطلب منك إنشاء حساب أو كلمة مرور. بعد هذه الخطوة ستختار الخدمات الإضافية أو تتخطاها، ثم تراجع العقد وتوافق عليه قبل الدفع.</div><button class="btn" type="submit">متابعة إلى الخدمات الإضافية</button></form></section></div></div>`;
 }
+
+async function checkoutAddons(oid) {
+  const o = await api("/api/orders/" + oid);
+  if (o.currentContract && o.status !== "received" && o.status !== "reviewing")
+    return `<div class="wrap"><div class="checkout">${pageHead("الخدمات الإضافية", "تم تجهيز عقد هذا الطلب بالفعل.")}<section class="panel">${link("/contract/" + o.id + "/" + o.currentContract, "الانتقال إلى العقد")}</section></div></div>`;
+  const baseService = o.type === "service" ? state.config.services.find((service) => service.id === o.service) : null;
+  const ids = o.type === "service"
+    ? (baseService?.checkoutAddons || []).map((addon) => addon.id)
+    : (state.config.productCheckoutAddonIds || []);
+  const addons = state.config.services.filter((service) => ids.includes(service.id));
+  const baseAmount = o.type === "service" ? (o.advertisedPrice?.from || 0) : (o.subtotal || o.amount || 0);
+  return `<div class="wrap"><div class="checkout">${pageHead("أضف ما تحتاجه", "الخدمات الإضافية اختيارية بالكامل؛ اختر المناسب أو تخط هذه الخطوة.")}<section class="panel"><div class="notice"><strong>طلبك الأساسي:</strong> ${E(o.title)}${baseAmount ? ` · ${money(baseAmount)}` : ""}</div>${addons.length ? `<form data-form="checkout-addons" data-id="${o.id}">${errors()}<div class="three-col">${addons.map((addon) => `<label class="panel addon-option"><input type="checkbox" name="addon_${E(addon.id)}"><span><strong>${E(addon.title)}</strong><small>${E(addon.description)}</small><b>${money(addon.pricing?.from || 0)} ${E(addon.pricing?.unit || "")}</b></span></label>`).join("")}</div><div class="actions spaced"><button class="btn" type="submit">اختيار والمتابعة إلى العقد</button></div></form>` : '<p class="muted">لا توجد خدمات إضافية مقترحة لهذا الطلب حاليًا.</p>'}<form data-form="checkout-addons-skip" data-id="${o.id}" class="spaced">${errors()}<button class="btn secondary" type="submit">تخطي الخدمات الإضافية</button></form></section></div></div>`;
+}
+
+async function paymentPage(oid) {
+  const o = await api("/api/orders/" + oid);
+  const q = o.contracts.find((contract) => contract.id === o.currentContract);
+  if (o.status === "quoted" && q && !q.acceptedAt)
+    return `<div class="wrap"><div class="checkout">${pageHead("الدفع", "يجب الموافقة على العقد قبل الانتقال للدفع.")}<section class="panel">${link("/contract/" + o.id + "/" + q.id, "مراجعة العقد والموافقة")}</section></div></div>`;
+  return `<div class="wrap"><div class="checkout">${pageHead("الدفع", "بعد الموافقة على العقد أكمل التحويل وأرسل الإيصال للمراجعة.")}${o.type === "service" ? progress(o) : ""}${paymentCard(o)}<div class="actions spaced">${link("/order/" + o.id, "متابعة الطلب", "secondary")}</div></div></div>`;
+}
+
 async function contracts(path) {
   const orders = (await api("/api/orders")).filter((o) => o.contracts.length);
   return workspace(
@@ -813,7 +836,7 @@ async function render() {
         "/notifications",
         "/support",
         "/profile",
-      ].includes(path) || /^\/(order|contract|invoice|checkout|admin)(\/|$)/.test(path);
+      ].includes(path) || /^\/(order|contract|invoice|addons|payment|admin)(\/|$)/.test(path);
     let html;
     if (privateRoute && !state.user) html = authRequired(raw);
     else if (path.startsWith("/admin") && state.user?.role !== "admin")
@@ -852,6 +875,10 @@ async function render() {
     else if (path === "/store") html = await store();
     else if (path.startsWith("/checkout/"))
       html = await checkout(path.split("/")[2]);
+    else if (path.startsWith("/addons/"))
+      html = await checkoutAddons(path.split("/")[2]);
+    else if (path.startsWith("/payment/"))
+      html = await paymentPage(path.split("/")[2]);
     else if (path === "/contracts") html = await contracts(path);
     else if (path.startsWith("/contract/")) html = await contractDocument(path.split("/")[2],path.split("/")[3]);
     else if (path === "/invoices") html = await invoices(path);
@@ -990,15 +1017,34 @@ document.addEventListener("submit", async (event) => {
         method: "POST",
         body: { ...b, type: "service", template: b.service === "ready-website" ? b.template : undefined, addons: b.service === "ready-website" ? ["hosting","domain","deployment"].filter(id => b["addon_"+id]) : [] },
       });
-      go("/order/" + o.id);
-      notify("تم استلام طلبك. ستتابع العقد والدفع والتنفيذ من هذه الصفحة دون تسجيل دخول.");
+      go("/addons/" + o.id);
+      notify("تم استلام طلبك. اختر الخدمات الإضافية أو تخطها للانتقال إلى العقد.");
     } else if (kind === "checkout") {
+      if (!state.user) {
+        const guest = await api("/api/auth/guest", {
+          method: "POST",
+          body: { name: b.customerName, email: b.customerEmail, phone: b.customerPhone },
+        });
+        state.user = guest.user;
+        state.csrf = guest.csrf;
+      }
       const o = await api("/api/orders", {
         method: "POST",
-        body: { type: "product", productId: oid, acceptTerms: !!b.acceptTerms, promoCode: b.promoCode },
+        body: { type: "product", productId: oid, promoCode: b.promoCode },
       });
-      go("/order/" + o.id);
-      notify("تم إنشاء طلب الشراء.");
+      go("/addons/" + o.id);
+      notify("تم إنشاء الطلب. اختر الخدمات الإضافية أو تخطها للانتقال إلى العقد.");
+    } else if (kind === "checkout-addons" || kind === "checkout-addons-skip") {
+      const addonServiceIds = kind === "checkout-addons"
+        ? Object.entries(b).filter(([key, value]) => key.startsWith("addon_") && value).map(([key]) => key.slice(6))
+        : [];
+      const order = await api(`/api/orders/${oid}/checkout-options`, {
+        method: "POST",
+        body: { addonServiceIds },
+      });
+      go("/contract/" + order.id + "/" + order.currentContract);
+      await render();
+      notify(addonServiceIds.length ? "تمت إضافة الخدمات المختارة وتجهيز العقد." : "تم تخطي الإضافات وتجهيز العقد.");
     } else if (
       kind === "message" ||
       kind === "accept" ||
@@ -1018,8 +1064,14 @@ document.addEventListener("submit", async (event) => {
         method: "POST",
         body: payload,
       });
-      await render();
-      notify("تم حفظ التحديث.");
+      if (kind === "accept") {
+        go("/payment/" + oid);
+        await render();
+        notify("تمت الموافقة على العقد. أكمل الدفع.");
+      } else {
+        await render();
+        notify("تم حفظ التحديث.");
+      }
     } else if (kind === "order-file" || kind === "payment-receipt" || kind === "product-file") {
       const file = form.querySelector("input[type=file]").files[0];
       if (!file) throw Error("اختر ملفًا أولًا.");
