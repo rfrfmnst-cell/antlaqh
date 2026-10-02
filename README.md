@@ -70,6 +70,7 @@ NODE_ENV=production
 APP_URL=https://your-verified-domain.example
 DB_DRIVER=mysql
 DB_HOST=localhost
+DB_SOCKET_PATH=/var/lib/mysql/mysql.sock
 DB_PORT=3306
 DB_NAME=your-database
 DB_USER=your-database-user
