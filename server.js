@@ -66,7 +66,12 @@ if (
 )
   throw Error("DATA_DIR must be outside the deployed checkout.");
 await mkdir(join(dataDir, "files"), { recursive: true });
-const db = await createStore({ driver, dir: dataDir });
+const db = await createStore({
+  driver,
+  dir: dataDir,
+  allowSqliteFallback:
+    production && process.env.DB_ALLOW_SQLITE_FALLBACK !== "false",
+});
 const recovery = await createRecovery({ db });
 let businessWhatsapp = "966553575760";
 try { businessWhatsapp = normalizePhone(process.env.BUSINESS_WHATSAPP_PHONE || "+966553575760").slice(1); } catch {}
@@ -379,6 +384,8 @@ async function api(req, res, url) {
     return json(res, 200, {
       status: "ok",
       version: appVersion,
+      databaseMode: db.mode,
+      databaseFallback: db.mode === "sqlite-fallback",
       ...(url.searchParams.has("verify-origin")
         ? {
             siteOrigin: origin,
