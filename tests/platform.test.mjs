@@ -441,6 +441,20 @@ test("server snapshots product price and denies download before payment", async 
 });
 test("paid product download is scoped to buyer and revoked entitlement takes effect", async () => {
   const path = `/api/orders/${productOrder.id}`;
+  const prepared = await request(path + "/checkout-options", {
+    as: alice,
+    method: "POST",
+    body: { addonServiceIds: [] },
+  });
+  assert.equal(prepared.status, 200);
+  assert.equal(prepared.data.status, "quoted");
+  const accepted = await request(path + "/accept", {
+    as: alice,
+    method: "POST",
+    body: { accept: true, contractId: prepared.data.currentContract },
+  });
+  assert.equal(accepted.status, 200);
+  assert.equal(accepted.data.status, "awaiting_payment");
   assert.equal(
     (
       await request(path + "/confirm-payment", {
