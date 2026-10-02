@@ -876,7 +876,7 @@ async function render() {
         "/profile",
       ].includes(path) || /^\/(order|contract|invoice|addons|payment|admin)(\/|$)/.test(path);
     let html;
-    if (privateRoute && !state.user) html = authRequired(raw, path.startsWith("/admin"));
+    if (privateRoute && !state.user && !path.startsWith("/track/")) html = authRequired(raw, path.startsWith("/admin"));
     else if (path.startsWith("/admin") && state.user?.role !== "admin")
       throw Error("هذه المساحة متاحة لإدارة المنصة فقط.");
     else if (path === "/") html = home();
@@ -904,7 +904,10 @@ async function render() {
     } else if (path === "/otp-login")
       html = `<div class="wrap"><div class="checkout">${pageHead("الدخول برمز الجوال", "للأرقام الموثّقة مسبقًا في حساب انطلاقة.")}<section class="panel">${state.config.smsReady ? `<form data-form="otp-send">${errors()}${field("phone", "رقم الجوال", "tel", 'required placeholder="+9665XXXXXXXX" autocomplete="tel"')}<button class="btn" type="submit">إرسال رمز الدخول</button></form>${state.loginChallenge ? `<form data-form="otp-check" class="spaced" data-next="${E(query.get("next") || "/dashboard")}">${errors()}${field("code", "رمز التحقق", "text", 'required inputmode="numeric" autocomplete="one-time-code" minlength="4" maxlength="10"')}<button class="btn" type="submit">تسجيل الدخول</button></form>` : ""}` : "<p>الدخول برمز الجوال غير مفعّل حاليًا.</p>"}<p class="small spaced"><a class="text-link" href="#/login">الدخول بالجوال وكلمة المرور</a></p></section></div></div>`;
     else if (path === "/start") html = start(query);
-    else if (path === "/dashboard" || path === "/admin")
+    else if (path.startsWith("/track/")) {
+      const parts = path.split("/");
+      html = await trackingOrder(path, parts[2], parts[3]);
+    } else if (path === "/dashboard" || path === "/admin")
       html = await dashboard(path);
     else if (path === "/orders" || path === "/admin/orders")
       html = await orderList(path);
@@ -923,8 +926,10 @@ async function render() {
     else if (path.startsWith("/invoice/"))
       html = await invoice(path.split("/")[2]);
     else if (path === "/notifications") html = await notifications(path);
-    else if (path === "/support") html = await support(path);
-    else if (path === "/profile") html = profile(path);
+    else if (path === "/support" || path === "/admin/support") html = await support(path);
+    else if (path === "/admin/contracts") html = await adminContracts(path);
+    else if (path === "/admin/payments") html = await adminPayments(path);
+    else if (path === "/admin/settings") html = await adminSettings(path);
     else if (path === "/admin/products") html = await adminProducts(path);
     else if (path === "/admin/customers") html = await customers(path);
     else if (path === "/terms" || path === "/privacy")
@@ -940,8 +945,8 @@ async function render() {
     if (seq !== state.sequence) return;
     if (e.sessionExpired) {
       header(path);
-      main.innerHTML = authRequired(raw);
-      notify("انتهت جلستك. سجّل الدخول لمتابعة طلبك.");
+      main.innerHTML = authRequired(raw, path.startsWith("/admin"));
+      notify(path.startsWith("/admin") ? "انتهت جلسة الإدارة. سجّل الدخول مجددًا." : "انتهت جلسة المتابعة. افتح رابط متابعة الطلب.");
     } else {
       main.innerHTML = `<div class="wrap section">${empty("تعذر فتح الصفحة", E(e.message), `<button class="btn" data-action="retry">حاول مجددًا</button> ${link("/", "الرئيسية", "secondary")}`)}</div>`;
     }
