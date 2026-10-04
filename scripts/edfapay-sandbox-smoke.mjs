@@ -1,7 +1,23 @@
 const endpoint = process.env.EDFAPAY_SANDBOX_INITIATE_URL || "https://demo-api.edfapay.com/api/v1/payment-gateway/initiate";
 const apiKey = String(process.env.EDFAPAY_SANDBOX_API_KEY || "").trim();
 if (!apiKey) {
-  console.log("EDFAPAY_SANDBOX: SKIPPED (missing GitHub secret EDFAPAY_SANDBOX_API_KEY)");
+  let probe;
+  try {
+    probe = await fetch(endpoint, {
+      method: "POST",
+      headers: { accept:"application/json", "Content-Type":"application/json" },
+      body: "{}",
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch (error) {
+    console.error("EDFAPAY_SANDBOX: FAIL (sandbox endpoint unreachable without credentials)", error.name);
+    process.exit(1);
+  }
+  if (probe.status >= 500) {
+    console.error("EDFAPAY_SANDBOX: FAIL (sandbox endpoint returned HTTP " + probe.status + ")");
+    process.exit(1);
+  }
+  console.log("EDFAPAY_SANDBOX: REACHABLE (HTTP " + probe.status + "; authentication secret not available in GitHub Actions)");
   process.exit(0);
 }
 const url = new URL(endpoint);
