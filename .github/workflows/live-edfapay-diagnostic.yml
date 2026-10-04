@@ -1,0 +1,36 @@
+name: Live EdfaPay diagnostic
+
+on:
+  push:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Read public live payment state
+        shell: bash
+        run: |
+          set -u
+          BASE="https://antlaqh.com"
+          code="$(curl -L -sS -o /tmp/config.json -w "%{http_code}" "$BASE/api/config" || true)"
+          echo "CONFIG_HTTP=$code"
+          if [ -f /tmp/config.json ]; then
+            node -e '
+              const fs=require("fs");
+              let c;
+              try { c=JSON.parse(fs.readFileSync("/tmp/config.json","utf8")); }
+              catch { console.log("CONFIG_NOT_JSON"); process.exit(0); }
+              console.log("PUBLIC_STATE="+JSON.stringify({
+                environment:c.environment,
+                payments:c.payments,
+                paymentMethods:c.paymentMethods,
+                siteOrigin:c.siteOrigin
+              }));
+            '
+          fi
+          hook="$(curl -sS -o /tmp/hook.txt -w "%{http_code}" "$BASE/api/webhooks/edfapay" || true)"
+          echo "WEBHOOK_GET_HTTP=$hook"
+          printf "WEBHOOK_GET_BODY="
+          cat /tmp/hook.txt 2>/dev/null || true
+          echo
