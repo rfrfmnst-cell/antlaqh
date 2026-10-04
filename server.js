@@ -473,7 +473,11 @@ async function api(req, res, url) {
       payments: edfapayCheckout.readiness.configured ? "edfapay_and_bank_transfer" : "bank_transfer",
       paymentMethods: {
         bankTransfer: { available: true },
-        edfapay: { available: edfapayCheckout.readiness.configured, mode: edfapayCheckout.readiness.mode },
+        edfapay: {
+          available: edfapayCheckout.readiness.configured,
+          mode: edfapayCheckout.readiness.mode,
+          reason: edfapayCheckout.readiness.reason,
+        },
       },
       bankTransfer: { bank: "البنك الأهلي السعودي", iban: "SA3610000044000001058010", currency: "SAR" },
       environment: production ? "production" : "development",
