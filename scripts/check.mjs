@@ -1,5 +1,10 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
+const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
+const packageLock = JSON.parse(readFileSync("package-lock.json", "utf8"));
+const lockRootVersion = packageLock.packages?.[""]?.version;
+if (packageJson.version !== packageLock.version || packageJson.version !== lockRootVersion)
+  throw Error(`Release version mismatch: package.json=${packageJson.version}, package-lock.json=${packageLock.version}, package-lock root=${lockRootVersion}`);
 for (const file of [
   "server.cjs",
   "server.js",

@@ -483,7 +483,7 @@ async function api(req, res, url) {
       },
       bankTransfer: { bank: "البنك الأهلي السعودي", iban: "SA3610000044000001058010", currency: "SAR" },
       environment: production ? "production" : "development",
-      release: "5.8.0",
+      release: appVersion,
       siteOrigin: origin,
     });
   if (method === "POST" && path === "/api/assistant") {
