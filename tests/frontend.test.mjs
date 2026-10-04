@@ -23,7 +23,7 @@ test("ready websites preserve template and promotion without customer login", as
   const ui = await app({hash:"#/ready-websites",settings});
   assert.match(ui.nodes.get("#main").innerHTML,/\/demos\/business\//);
   assert.match(ui.nodes.get("#main").innerHTML,/template=portfolio&promo=ANTLAQH20/);
-  assert.match(ui.nodes.get("#footer").innerHTML,/التحويل البنكي هو وسيلة الدفع الوحيدة/);
+  assert.match(ui.nodes.get("#footer").innerHTML,/التحويل البنكي متاح حاليًا/);
   ui.location.hash="#/start?service=ready-website&template=portfolio&promo=ANTLAQH20";
   await ui.render();
   assert.match(ui.nodes.get("#main").innerHTML,/name="customerName"/);
@@ -130,7 +130,7 @@ async function app({ hash = "#/", session = {}, fetch: request, settings = confi
       throw new Error("Unexpected request: " + path);
     },
   });
-  const runtime = await new vm.Script(`(async () => { ${source}\nreturn { state, render, api, go, header, paymentCard, serviceDetail, priceSummary, launchBanner, readyWebsites, start, whatsappLink, quoteForm, contractCard, contractDocument }; })()`).runInContext(context);
+  const runtime = await new vm.Script(`(async () => { ${source}\nreturn { state, render, api, go, header, paymentCard, paymentPage, serviceDetail, priceSummary, launchBanner, readyWebsites, start, whatsappLink, quoteForm, contractCard, contractDocument }; })()`).runInContext(context);
   return {
     ...runtime, nodes, location, requests, document,
     async event(name, event) {
@@ -274,6 +274,33 @@ test("configured contact and bank details are shown without HTML injection", asy
   assert.match(payment, /بنك &lt;اختبار&gt;/);
   assert.match(payment, /value="SA-test&quot;&lt;iban&gt;"/);
   assert.doesNotMatch(payment, /<اختبار>/);
+});
+
+test("EdfaPay checkout appears only when configured and redirects through the server-created session", async () => {
+  const settings = { ...config, paymentMethods:{bankTransfer:{available:true},edfapay:{available:true,mode:"sandbox"}}, bankTransfer:{bank:"بنك الاختبار",iban:"SA000"} };
+  const ui = await app({ hash:"#/services", settings, session:{user,csrf:"csrf"}, fetch:async(path)=>{
+    if(path==="/api/orders/order-1/payment-session") return response({redirectUrl:"https://demo.edfapay.com/pay/checkout?sessionId=test"});
+  }});
+  ui.state.user=user;
+  ui.state.config=settings;
+  const html=ui.paymentCard({id:"order-1",number:"ANT-1",amount:29900,status:"awaiting_payment",files:[]});
+  assert.match(html,/data-form="edfapay-payment"/);
+  assert.match(html,/الدفع الإلكتروني عبر مبسط/);
+  assert.match(html,/تحويل بنكي/);
+  const button={textContent:"الدفع",disabled:false};
+  const form={dataset:{form:"edfapay-payment",id:"order-1"},fields:{},querySelector(selector){return selector==="button[type=submit]"?button:null;}};
+  await ui.event("submit",{preventDefault(){},target:{closest(){return form;}}});
+  assert.equal(ui.location.href,"https://demo.edfapay.com/pay/checkout?sessionId=test");
+  assert.equal(button.disabled,false);
+});
+
+test("EdfaPay return page never claims payment is confirmed from the browser redirect", async () => {
+  const order={id:"order-2",owner:"customer",number:"ANT-2",amount:49900,status:"awaiting_payment",files:[],contracts:[{id:"contract-2",acceptedAt:"2026-10-04T10:00:00Z"}],currentContract:"contract-2",type:"service"};
+  const settings={...config,paymentMethods:{bankTransfer:{available:true},edfapay:{available:true,mode:"sandbox"}}};
+  const ui=await app({settings,session:{user,csrf:"csrf"},fetch:async(path)=>path==="/api/orders/order-2"?response(order):null});
+  const html=await ui.paymentPage("order-2",new URLSearchParams("provider=edfapay&result=success"));
+  assert.match(html,/نتحقق من إشعار EdfaPay الموقّع/);
+  assert.doesNotMatch(html,/تم تأكيد استلام الدفع/);
 });
 
 test("service detail uses the catalog fallback artwork for an additional service", async () => {
