@@ -47,6 +47,29 @@ test("hosted checkout sends the authoritative order amount server-side and retur
   assert.doesNotMatch(call.options.body,/test-api-key/);
 });
 
+
+test("sandbox deployment aliases use the sandbox key without requiring the production variable name", async () => {
+  let call;
+  const checkout = createEdfapayCheckout({
+    env: {
+      NODE_ENV:"test",
+      APP_URL:"http://localhost:3000",
+      EDFAPAY_CHECKOUT_ENABLED:"true",
+      EDFAPAY_SANDBOX_API_KEY:"sandbox-key-"+"s".repeat(32),
+    },
+    origin:"http://localhost:3000",
+    request:async(url,options)=>{
+      call={url,options};
+      return {ok:true,json:async()=>({code:200,data:{redirectUrl:"https://demo.edfapay.com/pay/checkout?sessionId=alias-test"}})};
+    },
+  });
+  assert.equal(checkout.readiness.configured,true);
+  assert.equal(checkout.readiness.mode,"sandbox");
+  await checkout.initiate({order:acceptedOrder,providerOrderId:"ANT-TEST-1-SANDBOX1"});
+  assert.equal(call.url,"https://demo-api.edfapay.com/api/v1/payment-gateway/initiate");
+  assert.equal(call.options.headers["X-API-KEY"],"sandbox-key-"+"s".repeat(32));
+});
+
 test("checkout rejects forged states, missing contact details, and non-EdfaPay redirects", async () => {
   let called=0;
   const checkout = createEdfapayCheckout({
