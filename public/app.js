@@ -474,7 +474,9 @@ function sidebar(path) {
     ["/admin/payments", "المدفوعات", "file"],
     ["/admin/customers", "العملاء", "user"],
     ["/admin/products", "المنتجات الرقمية", "file"],
-    ["/admin/support", "الدعم والمحادثات", "message"],
+    ["/admin/messages", "رسائل الطلبات", "message"],
+    ["/admin/support", "تذاكر الدعم", "message"],
+    ["/admin/channels", "قنوات الإرسال", "message"],
     ["/admin/settings", "الإعدادات", "user"],
   ];
   return `<aside class="sidebar" aria-label="لوحة إدارة انطلاقة"><div class="sidebar-label">فريق انطلاقة</div>${items.map(([p, l, i]) => `<a href="#${p}" class="${path === p ? "active" : ""}" ${path === p ? 'aria-current="page"' : ""}>${icon(i)}${l}</a>`).join("")}<div class="divider"></div><button data-action="logout">${icon("logout")}تسجيل خروج الإدارة</button></aside>`;
@@ -583,11 +585,26 @@ async function dashboard(path) {
         [summary.contracts, "عقود وعروض"],
         [summary.orders, "إجمالي الطلبات"],
       ];
+  const operations = admin ? await api("/api/admin/dashboard") : null;
   return workspace(
     path,
-    `${pageHead(admin ? "لوحة إدارة انطلاقة" : `أهلًا، ${E(state.user.name.split(" ")[0])}`, "متابعة واضحة لكل ما يحتاج انتباهك.", link(admin ? "/admin/orders" : "/start", admin ? "فتح الطلبات" : "مشروع جديد"))}<div class="stats">${tiles.map(([v, l], i) => `<div class="stat ${i === 0 ? "featured" : ""}"><span class="value">${v}</span><span class="label">${l}</span></div>`).join("")}</div><div class="section-head"><h2>أحدث الطلبات</h2><a class="text-link" href="#${admin ? "/admin/orders" : "/orders"}">عرض جميع الطلبات</a></div>${ordersTable(orders.slice(0, 6), admin)}${!admin ? journey() : ""}${!admin ? `<div class="banner"><div><h2>للفكرة التالية مساحة.</h2><p>اكتشف الخدمات التي تدعم خطوتك القادمة.</p></div>${link("/services", "تصفّح الخدمات", "lime")}</div>` : ""}`,
+    `${pageHead(admin ? "لوحة إدارة انطلاقة" : `أهلًا، ${E(state.user.name.split(" ")[0])}`, "متابعة واضحة لكل ما يحتاج انتباهك.", link(admin ? "/admin/orders" : "/start", admin ? "فتح الطلبات" : "مشروع جديد"))}<div class="stats">${tiles.map(([v, l], i) => `<div class="stat ${i === 0 ? "featured" : ""}"><span class="value">${v}</span><span class="label">${l}</span></div>`).join("")}</div>${admin ? adminOperations(operations) : ""}<div class="section-head"><h2>أحدث الطلبات</h2><a class="text-link" href="#${admin ? "/admin/orders" : "/orders"}">عرض جميع الطلبات</a></div>${ordersTable(orders.slice(0, 6), admin)}${!admin ? journey() : ""}${!admin ? `<div class="banner"><div><h2>للفكرة التالية مساحة.</h2><p>اكتشف الخدمات التي تدعم خطوتك القادمة.</p></div>${link("/services", "تصفّح الخدمات", "lime")}</div>` : ""}`,
   );
 }
+function adminOperations(d) {
+  const priority = (key,label,route) => '<a class="admin-priority" href="#' + route + '"><span>' + label + '</span><strong>' + (d[key] || 0) + '</strong>' + icon('arrow') + '</a>';
+  return '<section class="admin-command panel"><div class="section-head"><div><div class="eyebrow">قائمة العمل</div><h2>ما يحتاج انتباهك اليوم</h2></div><button class="btn secondary small" data-action="retry">تحديث البيانات</button></div><div class="admin-priorities">' + priority('awaitingReply','محادثات آخر رد فيها من العميل','/admin/messages') + priority('awaitingApproval','عقود تنتظر الموافقة','/admin/contracts') + priority('overdue','طلبات تجاوزت موعد التسليم','/admin/orders') + '<a class="admin-priority" href="#/admin/payments"><span>مبالغ بانتظار التحويل</span><strong>' + money(d.awaitingTransfer || 0) + '</strong>' + icon('arrow') + '</a></div><div class="admin-pipeline" aria-label="توزيع مراحل الطلبات">' + d.stages.map(s => '<div><span>' + E(statuses[s.status]) + '</span><strong>' + s.count + '</strong></div>').join('') + '</div><p class="small muted">تتحدث الأرقام عند فتح الصفحة أو الضغط على التحديث. المبالغ المنتظرة لا تُحسب ضمن المبالغ المستلمة.</p></section><section class="panel admin-shortcuts"><h2>إدارة العمل من مكان واحد</h2><div class="actions">' + link('/admin/contracts','مراجعة العقود','secondary') + link('/admin/payments','مراجعة التحويلات','secondary') + link('/admin/messages','رسائل العملاء','secondary') + link('/admin/channels','حالة قنوات الإرسال','secondary') + '</div></section>';
+}
+async function adminMessages(path) {
+  const orders = (await api('/api/orders?all=1')).filter(o => o.messages?.length).sort((a,b) => String(b.messages.at(-1).at).localeCompare(String(a.messages.at(-1).at)));
+  return workspace(path, pageHead('صندوق رسائل الطلبات','محادثات محفوظة ضمن الطلبات؛ الرد هنا يظهر في رابط متابعة العميل.') + '<div class="notice">رسائل المنصة مستقلة عن WhatsApp وSMS؛ لا تُحوَّل محتويات العملاء إلى مزوّد خارجي تلقائيًا.</div>' + (orders.length ? '<div class="admin-inbox">' + orders.map(o => { const latest = o.messages.at(-1), pending = latest.role !== 'admin'; return '<article class="panel"><div class="section-head"><div><h2>' + E(o.title) + '</h2><p class="small muted">' + E(o.customer.name) + ' · ' + E(o.number) + '</p></div><span class="badge ' + (pending ? 'received' : 'completed') + '">' + (pending ? 'آخر رد من العميل' : 'تم رد الفريق') + '</span></div><p class="pre">' + E(latest.message) + '</p><p class="small muted">' + time(latest.at) + '</p><div class="actions">' + link('/order/'+o.id,'المحادثة كاملة','secondary small') + '</div><form class="spaced" data-form="message" data-id="' + E(o.id) + '">' + errors() + textarea('message','الرد على العميل','required minlength="1" maxlength="4000"') + '<button class="btn" type="submit">حفظ الرد في الطلب</button></form></article>'; }).join('') + '</div>' : empty('لا توجد محادثات طلبات بعد','ستظهر رسائل العملاء هنا فور إضافتها إلى طلباتهم.')));
+}
+async function adminChannels(path) {
+  const c = await api('/api/admin/channels');
+  const card = (title,ready,body) => '<article class="panel admin-channel"><div class="ticket-head"><h2>' + title + '</h2><span class="badge ' + (ready ? 'completed' : 'reviewing') + '">' + (ready ? 'متاح' : 'يحتاج إعدادًا') + '</span></div><p>' + body + '</p></article>';
+  return workspace(path, pageHead('قنوات الإرسال','حالة التشغيل الفعلية ومتطلبات تفعيل الرسائل.') + '<div class="admin-channel-grid">' + card('WhatsApp',c.whatsapp.ready,c.whatsapp.ready ? 'استعادة كلمة المرور متاحة للأرقام الموثقة. التواصل المباشر مع الفريق متاح أيضًا.' : 'التواصل المباشر مع الفريق متاح. الإرسال الآلي غير مفعّل؛ يحتاج حساب WhatsApp Business وربط المزوّد ورقمًا معتمدًا وقالبًا مناسبًا قبل الإرسال.') + card('SMS',false,c.sms.configured ? 'إعدادات مزوّد رموز الجوال موجودة. يجب اختبار التوصيل والتحقق من الرقم قبل اعتبار الربط مكتملًا.' : 'الرسائل النصية تحتاج مزوّد SMS مستقلًا؛ Meta لا يرسل SMS. لم يُضبط مزوّد إرسال على المنصة.') + card('استعادة البريد',c.email.ready,c.email.ready ? 'اتصال البريد اجتاز التحقق عند تشغيل الخادم. اختبر التسليم إلى الحساب قبل الاعتماد على الخدمة.' : 'الإرسال غير مفعّل. يحتاج نطاق إرسال موثّق وإعدادات مزوّد البريد الخاصة واختبار التوصيل.') + card('الدفع البنكي',true,'التحويل البنكي هو الوسيلة المفعّلة. تأكيد الاستلام يتم يدويًا بعد مراجعة الإدارة.') + '</div><section class="panel"><h2>إعداد الربط</h2><p>حدد WhatsApp عبر Meta أو SMS أو كليهما. تحفظ المفاتيح في إعدادات الاستضافة الخاصة، وتُراجع أي رسوم أو موافقات حساب قبل التفعيل. لا تُرسل رسائل تسويقية إلى العملاء لمجرد وجود رقمهم في الطلب.</p><div class="actions">' + link('/admin/settings','إعدادات الإدارة','secondary') + '<a class="btn secondary" href="https://business.facebook.com/" target="_blank" rel="noopener noreferrer">فتح Meta Business</a></div></section>');
+}
+
 async function orderList(path) {
   const admin = path.startsWith("/admin");
   const orders = await api("/api/orders" + (admin ? "?all=1" : ""));
@@ -941,6 +958,8 @@ async function render() {
     else if (path === "/admin/contracts") html = await adminContracts(path);
     else if (path === "/admin/payments") html = await adminPayments(path);
     else if (path === "/admin/settings") html = await adminSettings(path);
+    else if (path === "/admin/messages") html = await adminMessages(path);
+    else if (path === "/admin/channels") html = await adminChannels(path);
     else if (path === "/admin/products") html = await adminProducts(path);
     else if (path === "/admin/customers") html = await customers(path);
     else if (path === "/terms" || path === "/privacy")

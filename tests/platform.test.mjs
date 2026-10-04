@@ -934,3 +934,13 @@ test("concurrent password changes cannot both authenticate with the old password
     assert.deepEqual(results.map((r) => r.status).sort(), [200, 409]);
   } finally { db.update = update; release(); }
 });
+
+test('admin operational endpoints deny customers and never expose provider credentials', async () => {
+  for (const p of ['/api/admin/dashboard','/api/admin/channels']) {
+    assert.equal((await request(p)).status,401);
+    assert.equal((await request(p,{as:alice})).status,403);
+    const r=await request(p,{as:admin});assert.equal(r.status,200);
+    assert.doesNotMatch(JSON.stringify(r.data),/AUTH_TOKEN|ACCOUNT_SID|SMTP_PASSWORD|ACCESS_TOKEN|trackingTokenHash/);
+  }
+  assert.equal((await request('/api/admin/channels',{as:admin})).data.payment,'bank_transfer');
+});

@@ -1,4 +1,5 @@
 import http from "node:http";
+import { operationalDashboard } from "./lib/admin-dashboard.js";
 import { services, coverKeys, customerJourney, productCheckoutAddonIds } from "./lib/catalog.js";
 import { createAssistant } from "./lib/assistant.js";
 import { isIP } from "node:net";
@@ -1123,6 +1124,16 @@ async function api(req, res, url) {
         registrationType: ["none", "commercial_registration", "freelance_certificate"].includes(process.env.BUSINESS_REGISTRATION_TYPE)
           ? process.env.BUSINESS_REGISTRATION_TYPE : "none",
         activity: process.env.BUSINESS_ACTIVITY || "",
+      });
+    if (method === "GET" && path === "/api/admin/dashboard")
+      return json(res, 200, operationalDashboard(await db.list("order")));
+    if (method === "GET" && path === "/api/admin/channels")
+      return json(res, 200, {
+        email: { ready: recovery.readiness.emailReady },
+        whatsapp: { ready: recovery.readiness.whatsappReady, direct: true, provider: recovery.readiness.whatsappReady ? "twilio" : null },
+        sms: { configured: smsReady },
+        assistant: { mode: process.env.ASSISTANT_MODE === "openai" ? "openai" : "guided" },
+        payment: "bank_transfer",
       });
     if (method === "GET" && path === "/api/admin/summary") {
       const orders = await db.list("order"),
