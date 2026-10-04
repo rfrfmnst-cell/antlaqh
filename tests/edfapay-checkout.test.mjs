@@ -110,7 +110,7 @@ test("readiness reports missing key without exposing secret material", () => {
 });
 
 
-test("production checkout auto-enables when the production API key is present unless explicitly disabled", async () => {
+test("production checkout stays enabled when the production API key is present even if a legacy false flag remains", async () => {
   let call;
   const checkout=createEdfapayCheckout({
     env:{
@@ -129,14 +129,15 @@ test("production checkout auto-enables when the production API key is present un
   assert.equal(call.url,"https://app-api.edfapay.com/api/v1/payment-gateway/initiate");
   assert.equal(call.options.headers["X-API-KEY"],"live-key-"+"p".repeat(32));
 
-  const disabled=createEdfapayCheckout({
+  const legacyFalse=createEdfapayCheckout({
     env:{
       NODE_ENV:"production",
       APP_URL:"https://antlaqh.com",
       EDFAPAY_CHECKOUT_ENABLED:"false",
       EDFAPAY_API_KEY:"live-key-"+"p".repeat(32),
     },
-    request:async()=>{throw Error("unused");},
+    request:async(url,options)=>({ok:true,json:async()=>({code:200,data:{redirectUrl:"https://app.edfapay.com/pay/checkout?sessionId=legacy-false"}})}),
   });
-  assert.equal(disabled.readiness.configured,false);
+  assert.equal(legacyFalse.readiness.configured,true);
+  assert.equal(legacyFalse.readiness.mode,"production");
 });
