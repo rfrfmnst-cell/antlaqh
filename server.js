@@ -476,6 +476,8 @@ async function api(req, res, url) {
         edfapay: {
           available: edfapayCheckout.readiness.configured,
           mode: edfapayCheckout.readiness.mode,
+          integration: edfapayCheckout.readiness.integration || "api_key",
+          requiresBillingAddress: !!edfapayCheckout.readiness.requiresBillingAddress,
           reason: edfapayCheckout.readiness.reason,
         },
       },
@@ -1129,7 +1131,8 @@ async function api(req, res, url) {
         throw fail(403, "إنشاء جلسة الدفع متاح لصاحب الطلب فقط.");
       rate(`edfapay-checkout:${auth.u.id}`, 10, 60000);
       const providerOrderId = `${o.number}-${id().slice(0, 12)}`;
-      const session = await edfapayCheckout.initiate({ order: o, providerOrderId });
+      const checkoutInput = await jsonBody(req);
+      const session = await edfapayCheckout.initiate({ order: o, providerOrderId, billing: checkoutInput.billing, payerIp: ip });
       await db.insert("edfapayAttempt", {
         id: digest(providerOrderId),
         providerOrderId,

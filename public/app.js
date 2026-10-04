@@ -702,7 +702,7 @@ function paymentCard(o) {
   const iban = state.config?.bankTransfer?.iban || "SA3610000044000001058010";
   const online = !!state.config?.paymentMethods?.edfapay?.available;
   const onlinePay = online && state.user?.role !== "admin"
-    ? `<section class="payment-choice"><h3>دفع إلكتروني عبر مبسط / EdfaPay</h3><p class="small">ستنتقل إلى صفحة دفع مستضافة وآمنة لدى مزوّد الدفع. لا تدخل بيانات بطاقتك داخل منصة انطلاقة.</p><form data-form="edfapay-payment" data-id="${E(o.id)}"><button class="btn" type="submit">الانتقال للدفع الإلكتروني</button></form><p class="small muted">بعد العودة ننتظر إشعار المزوّد الموقّع قبل اعتبار العملية محصّلة.</p></section>`
+    ? `<section class="payment-choice"><h3>دفع إلكتروني عبر مبسط / EdfaPay</h3><p class="small">ستنتقل إلى صفحة دفع مستضافة وآمنة لدى مزوّد الدفع. لا تدخل بيانات بطاقتك داخل منصة انطلاقة.</p><form data-form="edfapay-payment" data-id="${E(o.id)}">${state.config?.paymentMethods?.edfapay?.requiresBillingAddress ? `<div class="form-grid">${field("billingFirstName","الاسم الأول","text",'required maxlength="32" autocomplete="given-name"')}${field("billingLastName","اسم العائلة","text",'required maxlength="32" autocomplete="family-name"')}${field("billingAddress","عنوان الفوترة","text",'required maxlength="255" autocomplete="street-address"')}${field("billingCity","المدينة","text",'required maxlength="32" autocomplete="address-level2"')}${field("billingZip","الرمز البريدي","text",'required maxlength="10" autocomplete="postal-code"')}${field("billingCountry","رمز البلد (مثال: SA)","text",'required minlength="2" maxlength="2" pattern="[A-Za-z]{2}" autocomplete="country" value="SA" dir="ltr"')}</div>` : ""}<button class="btn" type="submit">الانتقال للدفع الإلكتروني</button></form><p class="small muted">العودة من بوابة الدفع لا تؤكد التحصيل؛ تتحقق الإدارة من استلام المبلغ.</p></section>`
     : "";
   return `<section class="panel"><h2>ملخص الدفع</h2>${priceSummary(o)}${o.payment?.confirmed && !o.payment.revoked ? `<div class="notice">تم تأكيد استلام الدفع في ${date(o.payment.at)}.</div>${link("/invoice/" + o.id, "عرض إيصال الدفع", "secondary")}${o.type === "product" ? `<a class="btn spaced" href="/api/orders/${o.id}/download">${icon("download")} تنزيل المنتج</a>` : ""}` : o.status === "awaiting_payment" ? `${onlinePay}<hr class="spaced"><h3>تحويل بنكي — ${E(bank)}</h3><p class="small">حوّل المبلغ الموضح أعلاه، واذكر رقم الطلب في وصف التحويل.</p><div class="field"><label for="bank-iban">رقم الآيبان</label><input id="bank-iban" dir="ltr" readonly value="${E(iban)}" aria-label="رقم الآيبان لـ${E(bank)}"></div><p class="small muted">رقم الطلب: <strong dir="ltr">${E(o.number)}</strong></p>${o.files.filter(f => f.purpose === "payment_receipt").map(f => `<div class="file-row"><div><strong>إيصال تحويل مرفق</strong><small>${date(f.at)}</small></div><a class="btn secondary small" href="/api/orders/${o.id}/files/${f.id}">عرض الإيصال</a></div>`).join("")}${state.user.role !== "admin" ? `<form class="spaced" data-form="payment-receipt" data-id="${o.id}">${errors()}<div class="field"><label for="transfer-receipt">إرفاق إيصال التحويل</label><input id="transfer-receipt" name="file" type="file" accept=".pdf,.png,.jpg,.jpeg" required><p class="hint">PDF أو PNG أو JPEG، حتى 10 ميجابايت. الإيصال متاح لك وللإدارة فقط.</p></div><button class="btn" type="submit">إرسال الإيصال للمراجعة</button></form>` : ""}<div class="notice warning">رفع إيصال التحويل أو العودة من صفحة الدفع الإلكتروني لا يؤكد الدفع تلقائيًا؛ تؤكد الإدارة التحصيل بعد التحقق.</div>` : `<p class="small muted">${o.payment?.revoked ? "أُلغي استحقاق هذه الدفعة. راجع فريق الدعم." : "يأتي الدفع بعد اعتماد العرض والعقد."}</p>`}</section>`;
 }
@@ -785,7 +785,7 @@ async function paymentPage(oid, query = new URLSearchParams()) {
     return `<div class="wrap"><div class="checkout">${pageHead("الدفع", "يجب الموافقة على العقد قبل الانتقال للدفع.")}<section class="panel">${link("/contract/" + o.id + "/" + q.id, "مراجعة العقد والموافقة")}</section></div></div>`;
   const returned = query.get("provider") === "edfapay"
     ? query.get("result") === "success"
-      ? '<div class="notice">عدت من بوابة الدفع. نتحقق من إشعار EdfaPay الموقّع قبل اعتبار الطلب مدفوعًا؛ يمكنك متابعة حالة الطلب من هذه الصفحة.</div>'
+      ? '<div class="notice">عدت من بوابة الدفع. تتحقق الإدارة من استلام المبلغ لدى مزوّد الدفع قبل اعتبار الطلب مدفوعًا؛ يمكنك متابعة حالة الطلب من هذه الصفحة.</div>'
       : query.get("result") === "failure"
         ? '<div class="notice warning">لم تكتمل عملية الدفع الإلكتروني. يمكنك المحاولة مرة أخرى أو استخدام التحويل البنكي.</div>'
         : ""
@@ -1190,7 +1190,7 @@ document.addEventListener("submit", async (event) => {
     } else if (kind === "edfapay-payment") {
       const session = await api(`/api/orders/${oid}/payment-session`, {
         method: "POST",
-        body: {},
+        body: state.config?.paymentMethods?.edfapay?.requiresBillingAddress ? { billing: { firstName: b.billingFirstName, lastName: b.billingLastName, address: b.billingAddress, city: b.billingCity, zip: b.billingZip, country: b.billingCountry } } : {},
       });
       if (typeof session.redirectUrl !== "string" || !/^https:\/\/([a-z0-9-]+\.)*edfapay\.com(?:[/:?#]|$)/i.test(session.redirectUrl))
         throw Error("تعذر التحقق من رابط بوابة الدفع.");
