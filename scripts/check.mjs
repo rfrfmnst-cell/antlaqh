@@ -13,6 +13,7 @@ for (const file of [
   "lib/promotion.js",
   "lib/contracts.js",
   "lib/recovery.js",
+  "lib/meta-webhook.js",
   "public/integrations.js",
   "public/app.js",
 ]) {
