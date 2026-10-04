@@ -1,6 +1,6 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
@@ -943,4 +943,12 @@ test('admin operational endpoints deny customers and never expose provider crede
     assert.doesNotMatch(JSON.stringify(r.data),/AUTH_TOKEN|ACCOUNT_SID|SMTP_PASSWORD|ACCESS_TOKEN|trackingTokenHash/);
   }
   assert.equal((await request('/api/admin/channels',{as:admin})).data.payment,'bank_transfer');
+});
+
+
+test("public payment config exposes only a safe EdfaPay readiness reason", async () => {
+  const source = await readFile(new URL("../server.js", import.meta.url), "utf8");
+  assert.match(source, /reason:\s*edfapayCheckout\.readiness\.reason/);
+  assert.doesNotMatch(source, /paymentMethods[\s\S]{0,500}EDFAPAY_API_KEY/);
+  assert.doesNotMatch(source, /paymentMethods[\s\S]{0,500}EDFAPAY_WEBHOOK_SECRET/);
 });
