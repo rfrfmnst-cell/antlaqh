@@ -23,6 +23,7 @@ jobs:
               catch { console.log("CONFIG_NOT_JSON"); process.exit(0); }
               console.log("PUBLIC_STATE="+JSON.stringify({
                 environment:c.environment,
+                release:c.release,
                 payments:c.payments,
                 paymentMethods:c.paymentMethods,
                 siteOrigin:c.siteOrigin
