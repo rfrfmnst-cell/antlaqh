@@ -17,6 +17,8 @@ for (const file of [
   "lib/recovery.js",
   "lib/meta-webhook.js",
   "lib/edfapay-webhook.js",
+  "lib/edfapay-checkout.js",
+  "lib/edfapay-api-checkout.js",
   "public/integrations.js",
   "public/app.js",
 ]) {

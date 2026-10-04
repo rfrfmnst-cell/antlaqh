@@ -299,7 +299,7 @@ test("EdfaPay return page never claims payment is confirmed from the browser red
   const settings={...config,paymentMethods:{bankTransfer:{available:true},edfapay:{available:true,mode:"sandbox"}}};
   const ui=await app({settings,session:{user,csrf:"csrf"},fetch:async(path)=>path==="/api/orders/order-2"?response(order):null});
   const html=await ui.paymentPage("order-2",new URLSearchParams("provider=edfapay&result=success"));
-  assert.match(html,/نتحقق من إشعار EdfaPay الموقّع/);
+  assert.match(html,/تتحقق الإدارة من استلام المبلغ لدى مزوّد الدفع/);
   assert.doesNotMatch(html,/تم تأكيد استلام الدفع/);
 });
 
@@ -339,4 +339,15 @@ test("footer follows electronic payment availability", async () => {
   for (const brand of ["VISA", "Mastercard", "mada", "Apple Pay"]) assert.ok(footer.includes(brand));
   assert.match(footer,/الدفع الإلكتروني عبر مبسط \/ EdfaPay متاح/);
   assert.doesNotMatch(footer,/وسيلة الدفع الوحيدة/);
+});
+test('merchant billing fields are submitted only to the owner checkout endpoint', async()=>{
+ const settings={...config,paymentMethods:{edfapay:{available:true,requiresBillingAddress:true}}}; let submitted;
+ const ui=await app({hash:'#/services',settings,session:{user,csrf:'csrf'},fetch:async(path,options)=>{if(path==='/api/orders/order-1/payment-session'){submitted=JSON.parse(options.body);return response({redirectUrl:'https://pay.edfapay.com/checkout/test'});}}});
+ ui.state.user=user;ui.state.config=settings;
+ const html=ui.paymentCard({id:'order-1',number:'ANT-1',amount:29900,status:'awaiting_payment',files:[]});
+ for(const name of ['billingFirstName','billingLastName','billingAddress','billingCity','billingZip','billingCountry'])assert.ok(html.includes('name="'+name+'"'));
+ const button={textContent:'الدفع',disabled:false}; const form={dataset:{form:'edfapay-payment',id:'order-1'},fields:{billingFirstName:'Test',billingLastName:'User',billingAddress:'Street 1',billingCity:'Riyadh',billingZip:'12345',billingCountry:'SA'},querySelector(s){return s==='button[type=submit]'?button:null;}};
+ await ui.event('submit',{preventDefault(){},target:{closest(){return form;}}});
+ assert.deepEqual(submitted.billing,{firstName:'Test',lastName:'User',address:'Street 1',city:'Riyadh',zip:'12345',country:'SA'});
+ assert.equal(submitted.amount,undefined); assert.equal(submitted.payerIp,undefined);
 });
