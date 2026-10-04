@@ -1,0 +1,67 @@
+name: Live EdfaPay smoke test
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+    paths:
+      - ".github/workflows/live-edfapay-smoke.yml"
+      - "lib/edfapay-checkout.js"
+      - "lib/edfapay-webhook.js"
+      - "server.js"
+      - "public/**"
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Verify live Antlaqh payment integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://antlaqh.com"
+
+          echo "Waiting for the deployed app to expose the expected config..."
+          ok=0
+          for i in $(seq 1 20); do
+            code="$(curl -L -sS -o /tmp/config.json -w "%{http_code}" "$BASE/api/config" || true)"
+            if [ "$code" = "200" ]; then
+              if node -e '
+                const fs=require("fs");
+                const c=JSON.parse(fs.readFileSync("/tmp/config.json","utf8"));
+                if (c.environment!=="production") throw new Error("Live app is not reporting production mode");
+                if (!c.paymentMethods?.bankTransfer?.available) throw new Error("Bank transfer is unexpectedly unavailable");
+                if (!c.paymentMethods?.edfapay?.available) throw new Error("EdfaPay is not enabled in live config");
+                if (c.paymentMethods.edfapay.mode!=="sandbox") throw new Error("Expected EdfaPay sandbox mode, got: "+c.paymentMethods.edfapay.mode);
+                if (c.payments!=="edfapay_and_bank_transfer") throw new Error("Unexpected payments mode: "+c.payments);
+                if (!String(c.siteOrigin||"").startsWith("https://antlaqh.com")) throw new Error("Unexpected siteOrigin: "+c.siteOrigin);
+                console.log("LIVE_CONFIG_OK", JSON.stringify({
+                  environment:c.environment,
+                  payments:c.payments,
+                  edfapay:c.paymentMethods.edfapay,
+                  siteOrigin:c.siteOrigin
+                }));
+              '; then
+                ok=1
+                break
+              fi
+            fi
+            echo "Attempt $i: /api/config returned HTTP $code or config not ready"
+            sleep 15
+          done
+          if [ "$ok" != "1" ]; then
+            echo "Live config did not become ready"
+            cat /tmp/config.json 2>/dev/null || true
+            exit 1
+          fi
+
+          home_code="$(curl -L -sS -o /tmp/home.html -w "%{http_code}" "$BASE/" || true)"
+          test "$home_code" = "200" || { echo "Homepage HTTP $home_code"; exit 1; }
+
+          hook_code="$(curl -sS -o /tmp/hook.txt -w "%{http_code}" "$BASE/api/webhooks/edfapay" || true)"
+          test "$hook_code" = "405" || { echo "Webhook GET returned HTTP $hook_code"; cat /tmp/hook.txt; exit 1; }
+          grep -qx "ERROR" /tmp/hook.txt || { echo "Unexpected webhook GET body"; cat /tmp/hook.txt; exit 1; }
+
+          echo "LIVE_HOMEPAGE_OK"
+          echo "LIVE_WEBHOOK_ROUTE_OK"
