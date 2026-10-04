@@ -6,6 +6,8 @@ on:
     branches: [ "main" ]
     paths:
       - ".github/workflows/live-edfapay-smoke.yml"
+      - "package.json"
+      - "package-lock.json"
       - "lib/edfapay-checkout.js"
       - "lib/edfapay-webhook.js"
       - "server.js"
@@ -16,20 +18,29 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
+      - uses: actions/checkout@v4
       - name: Verify live Antlaqh payment integration
         shell: bash
         run: |
           set -euo pipefail
           BASE="https://antlaqh.com"
+          EXPECTED_RELEASE="$(node -p "require('./package.json').version")"
 
           echo "Waiting for the deployed app to expose the expected config..."
           ok=0
           for i in $(seq 1 20); do
             code="$(curl -L -sS -o /tmp/config.json -w "%{http_code}" "$BASE/api/config" || true)"
-            if [ "$code" = "200" ]; then
+            health_code="$(curl -L -sS -o /tmp/health.json -w "%{http_code}" "$BASE/api/health" || true)"
+            if [ "$code" = "200" ] && [ "$health_code" = "200" ]; then
               if node -e '
                 const fs=require("fs");
                 const c=JSON.parse(fs.readFileSync("/tmp/config.json","utf8"));
+                const h=JSON.parse(fs.readFileSync("/tmp/health.json","utf8"));
+                const expected=process.env.EXPECTED_RELEASE;
+                if (!expected) throw new Error("EXPECTED_RELEASE is missing");
+                if (c.release!==expected) throw new Error("Expected deployed config release "+expected+", got: "+c.release);
+                if (h.version!==expected) throw new Error("Expected deployed health version "+expected+", got: "+h.version);
+                if (c.release!==h.version) throw new Error("Config/health release mismatch: "+c.release+" vs "+h.version);
                 if (c.environment!=="production") throw new Error("Live app is not reporting production mode");
                 if (!c.paymentMethods?.bankTransfer?.available) throw new Error("Bank transfer is unexpectedly unavailable");
                 if (!c.paymentMethods?.edfapay?.available) throw new Error("EdfaPay is not enabled in live config");
@@ -37,22 +48,26 @@ jobs:
                 if (c.payments!=="edfapay_and_bank_transfer") throw new Error("Unexpected payments mode: "+c.payments);
                 if (!String(c.siteOrigin||"").startsWith("https://antlaqh.com")) throw new Error("Unexpected siteOrigin: "+c.siteOrigin);
                 console.log("LIVE_CONFIG_OK", JSON.stringify({
+                  release:c.release,
+                  healthVersion:h.version,
                   environment:c.environment,
                   payments:c.payments,
                   edfapay:c.paymentMethods.edfapay,
                   siteOrigin:c.siteOrigin
                 }));
-              '; then
+              ' EXPECTED_RELEASE="$EXPECTED_RELEASE"; then
                 ok=1
                 break
               fi
             fi
-            echo "Attempt $i: /api/config returned HTTP $code or config not ready"
+            echo "Attempt $i: /api/config HTTP $code, /api/health HTTP $health_code, expected release $EXPECTED_RELEASE"
             sleep 15
           done
           if [ "$ok" != "1" ]; then
             echo "Live config did not become ready"
             cat /tmp/config.json 2>/dev/null || true
+            echo
+            cat /tmp/health.json 2>/dev/null || true
             exit 1
           fi
 
