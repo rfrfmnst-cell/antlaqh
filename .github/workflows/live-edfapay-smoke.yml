@@ -33,7 +33,7 @@ jobs:
                 if (c.environment!=="production") throw new Error("Live app is not reporting production mode");
                 if (!c.paymentMethods?.bankTransfer?.available) throw new Error("Bank transfer is unexpectedly unavailable");
                 if (!c.paymentMethods?.edfapay?.available) throw new Error("EdfaPay is not enabled in live config");
-                if (c.paymentMethods.edfapay.mode!=="sandbox") throw new Error("Expected EdfaPay sandbox mode, got: "+c.paymentMethods.edfapay.mode);
+                if (c.paymentMethods.edfapay.mode!=="production") throw new Error("Expected EdfaPay production mode, got: "+c.paymentMethods.edfapay.mode);
                 if (c.payments!=="edfapay_and_bank_transfer") throw new Error("Unexpected payments mode: "+c.payments);
                 if (!String(c.siteOrigin||"").startsWith("https://antlaqh.com")) throw new Error("Unexpected siteOrigin: "+c.siteOrigin);
                 console.log("LIVE_CONFIG_OK", JSON.stringify({
