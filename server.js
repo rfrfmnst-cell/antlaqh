@@ -21,6 +21,7 @@ import {
   phone as normalizePhone,
   hashPassword,
   checkPassword,
+  dummyPasswordHash,
   publicUser,
   body,
   jsonBody,
@@ -552,9 +553,8 @@ async function api(req, res, url) {
     const valid =
       typeof b.password === "string" &&
       b.password.length <= 128 &&
-      u &&
-      (await checkPassword(b.password, u.password));
-    if (!valid || u.disabled)
+      (await checkPassword(b.password, u?.password || dummyPasswordHash));
+    if (!valid || !u || u.disabled)
       throw fail(401, "بيانات الدخول أو كلمة المرور غير صحيحة.");
     if (auth) await db.remove("session", auth.s.id);
     return json(res, 200, await login(res, u));

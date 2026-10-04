@@ -10,6 +10,7 @@ for (const file of [
   "lib/guided-assistant.js",
   "public/assistant.js",
   "lib/security.js",
+  "lib/crypto-work.js",
   "lib/promotion.js",
   "lib/contracts.js",
   "lib/recovery.js",
