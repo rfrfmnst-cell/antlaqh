@@ -23,7 +23,7 @@ test("ready websites preserve template and promotion without customer login", as
   const ui = await app({hash:"#/ready-websites",settings});
   assert.match(ui.nodes.get("#main").innerHTML,/\/demos\/business\//);
   assert.match(ui.nodes.get("#main").innerHTML,/template=portfolio&promo=ANTLAQH20/);
-  assert.match(ui.nodes.get("#footer").innerHTML,/التحويل البنكي متاح حاليًا/);
+  assert.match(ui.nodes.get("#footer").innerHTML,/التحويل البنكي هو وسيلة الدفع الوحيدة حاليًا/);
   ui.location.hash="#/start?service=ready-website&template=portfolio&promo=ANTLAQH20";
   await ui.render();
   assert.match(ui.nodes.get("#main").innerHTML,/name="customerName"/);
@@ -285,7 +285,7 @@ test("EdfaPay checkout appears only when configured and redirects through the se
   ui.state.config=settings;
   const html=ui.paymentCard({id:"order-1",number:"ANT-1",amount:29900,status:"awaiting_payment",files:[]});
   assert.match(html,/data-form="edfapay-payment"/);
-  assert.match(html,/الدفع الإلكتروني عبر مبسط/);
+  assert.match(html,/دفع إلكتروني عبر مبسط/);
   assert.match(html,/تحويل بنكي/);
   const button={textContent:"الدفع",disabled:false};
   const form={dataset:{form:"edfapay-payment",id:"order-1"},fields:{},querySelector(selector){return selector==="button[type=submit]"?button:null;}};
