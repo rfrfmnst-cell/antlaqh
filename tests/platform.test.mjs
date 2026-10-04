@@ -944,3 +944,11 @@ test('admin operational endpoints deny customers and never expose provider crede
   }
   assert.equal((await request('/api/admin/channels',{as:admin})).data.payment,'bank_transfer');
 });
+
+
+test("public payment config exposes only a safe EdfaPay readiness reason", async () => {
+  const source = await readFile(new URL("../server.js", import.meta.url), "utf8");
+  assert.match(source, /reason:\s*edfapayCheckout\.readiness\.reason/);
+  assert.doesNotMatch(source, /paymentMethods[\s\S]{0,500}EDFAPAY_API_KEY/);
+  assert.doesNotMatch(source, /paymentMethods[\s\S]{0,500}EDFAPAY_WEBHOOK_SECRET/);
+});
