@@ -25,6 +25,7 @@ jobs:
           set -euo pipefail
           BASE="https://antlaqh.com"
           EXPECTED_RELEASE="$(node -p "require('./package.json').version")"
+          export EXPECTED_RELEASE
 
           echo "Waiting for the deployed app to expose the expected config..."
           ok=0
@@ -55,7 +56,7 @@ jobs:
                   edfapay:c.paymentMethods.edfapay,
                   siteOrigin:c.siteOrigin
                 }));
-              ' EXPECTED_RELEASE="$EXPECTED_RELEASE"; then
+              '; then
                 ok=1
                 break
               fi
