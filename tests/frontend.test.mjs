@@ -33,6 +33,38 @@ test("ready websites preserve template and promotion without customer login", as
   assert.match(ui.nodes.get("#main").innerHTML,/name="addon_hosting"/);
   assert.match(ui.nodes.get("#main").innerHTML,/name="promoCode"[^>]*value="ANTLAQH20"/);
 });
+test("study intake asks both choices and renders every price with conditional funding fields", async () => {
+  const ui = await app({hash:"#/start?service=feasibility",settings:{...config,services,customerJourney}});
+  const html=ui.nodes.get("#main").innerHTML;
+  assert.match(html,/name="study_depth"/);
+  assert.match(html,/name="study_purpose"/);
+  assert.match(html,/id="study-options" class="study-options" >/);
+  assert.match(html,/id="study-funding-options" hidden disabled/);
+  for(const name of ["stage","activity","city","customers","operations","costs","sales","capital","fundingEntity","fundingAmount","fundingRequirements"]) assert.match(html,new RegExp('name="study_'+name+'"'));
+  const detail=ui.serviceDetail("feasibility");
+  for(const value of [29900,69900,49900,119900]) assert.ok(detail.includes(new Intl.NumberFormat("ar-SA",{style:"currency",currency:"SAR",maximumFractionDigits:2}).format(value/100)));
+  assert.match(detail,/لا يُضمن ربح المشروع أو قبول التمويل/);
+  ui.location.hash="#/start?service=website";await ui.render();
+  assert.match(ui.nodes.get("#main").innerHTML,/id="study-options" class="study-options" hidden disabled/);
+  ui.location.hash="#/study-files/private-order";await ui.render();
+  assert.match(ui.nodes.get("#main").innerHTML,/جلسة المتابعة غير متاحة/);
+});
+test("study input changes update the package price and enable financing requirements only when selected",async()=>{
+  const ui=await app({settings:{...config,services,customerJourney}});
+  const options={},funding={},preview={},selectors={
+    '#study-options':options,'#study-funding-options':funding,'#study-price-preview':preview,
+    '[name="service"]':{value:'feasibility'},'[name="study_depth"]':{value:'detailed'},'[name="study_purpose"]':{value:'financing'},
+  };
+  const form={querySelector:selector=>selectors[selector]||null};
+  await ui.event('change',{target:{name:'study_purpose',closest:()=>form}});
+  assert.equal(options.disabled,false);assert.equal(funding.disabled,false);assert.match(preview.innerHTML,/دراسة تفصيلية لطلب التمويل/);
+  selectors['[name="study_purpose"]'].value='personal';
+  await ui.event('change',{target:{name:'study_purpose',closest:()=>form}});
+  assert.equal(funding.disabled,true);assert.match(preview.innerHTML,/دراسة تفصيلية للاستخدام الشخصي/);
+  selectors['[name="service"]'].value='website';
+  await ui.event('change',{target:{name:'service',closest:()=>form}});
+  assert.equal(options.hidden,true);assert.equal(options.disabled,true);
+});
 test("an expired launch offer is no longer advertised but a saved quote shows its original discount", async () => {
   const ui = await app({settings:{...config,services,customerJourney,launchOffer:{code:"ANTLAQH20",ratePercent:20,active:true,startsAt:"2026-01-01T00:00:00Z",endsAt:"2026-02-01T00:00:00Z",terms:[]}}});
   assert.equal(ui.launchBanner(),"");

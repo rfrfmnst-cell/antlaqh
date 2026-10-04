@@ -743,7 +743,7 @@ test("OTP verification and login bind phone and account; approved codes are sing
 test("service catalog exposes 15 services including ready websites and no assistant credentials", async () => {
   const r = await request("/api/config");
   assert.equal(r.status, 200);
-  assert.equal(r.data.services.length, 15);
+  assert.equal(r.data.services.length, 16);
   assert.equal(r.data.assistantReady, true);
   assert.equal(r.data.assistantMode, "guided");
   const ids = r.data.services.map((s) => s.id);

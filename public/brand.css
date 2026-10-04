@@ -2485,3 +2485,18 @@ img {
   .site-footer .share-platform > span { text-align: start; }
   .site-footer .footer-bottom { flex-direction: column; align-items: flex-start; gap: 8px; padding-bottom: 96px; line-height: 1.8; }
 }
+
+/* Feasibility study intake and document review. */
+.study-options { border: 1px solid var(--line, #ddd); border-radius: 18px; padding: 22px; margin: 24px 0; min-width: 0; }
+.study-options legend { font-weight: 700; padding: 0 8px; }
+.study-options fieldset { border: 0; padding: 0; margin-top: 24px; min-width: 0; }
+.study-options fieldset legend { padding: 0; margin-bottom: 16px; }
+.study-summary { overflow-wrap: anywhere; }
+.study-summary dt { font-weight: 700; margin-top: 18px; }
+.study-summary dd { margin: 6px 0 0; }
+.study-packages td { vertical-align: top; min-width: 120px; }
+.study-packages td:last-child { min-width: 260px; }
+.study-packages ul, .study-summary ul { padding-inline-start: 22px; }
+.study-store-callout { background: #edf4ed; margin-block: 24px; }
+.study-store-callout .btn { margin-inline-end: 10px; margin-top: 10px; }
+@media (max-width: 640px) { .study-options { padding: 16px; } .study-options .form-grid { grid-template-columns: 1fr; } }

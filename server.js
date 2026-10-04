@@ -1,5 +1,6 @@
 import http from "node:http";
 import { operationalDashboard } from "./lib/admin-dashboard.js";
+import { validateStudy, validateStudyDocuments, studyDocuments } from "./lib/feasibility.js";
 import { services, coverKeys, customerJourney, productCheckoutAddonIds } from "./lib/catalog.js";
 import { createAssistant } from "./lib/assistant.js";
 import { isIP } from "node:net";
@@ -244,10 +245,10 @@ function checkoutContractDetails(base, selectedAddons = []) {
     cancellation: "يعالج الإلغاء والاسترداد وفق حالة التنفيذ والأعمال المنجزة والأنظمة المعمول بها، وتوثق أي تسوية داخل الطلب.",
   };
 }
-async function saveFile(req) {
+async function saveFile(req, studyFile = false) {
   const contentType = (req.headers["content-type"] || "").split(";")[0];
   const buffer = await body(req, 10 * 1024 * 1024);
-  validFile(buffer, contentType);
+  validFile(buffer, contentType, studyFile);
   let name;
   try {
     name = decodeURIComponent(req.headers["x-file-name"] || "ملف");
@@ -772,6 +773,10 @@ async function api(req, res, url) {
       o.type = "service";
       o.service = service.id;
       o.advertisedPrice = { ...service.pricing };
+      if (service.id === "feasibility") {
+        o.study = validateStudy(b.study);
+        o.advertisedPrice = { ...service.pricing, from: o.study.plan.amount, scope: o.study.plan.includes.join("؛ ") };
+      } else if (b.study !== undefined) throw fail(400, "أسئلة الدراسة متاحة لخدمة دراسة الجدوى فقط.");
       if (service.id === "ready-website") {
         const template = service.templates.find(t => t.id === b.template);
         if (!template) throw fail(400, "اختر نموذج الموقع الجاهز.");
@@ -839,7 +844,11 @@ async function api(req, res, url) {
       const receipt = req.headers["x-file-purpose"] === "payment_receipt";
       if (receipt && o.status !== "awaiting_payment")
         throw fail(409, "يرفع إيصال التحويل بعد اعتماد العرض وقبل تأكيد الدفع.");
-      const f = await saveFile(req);
+      const studyCategory = req.headers["x-study-category"];
+      if (studyCategory && (o.service !== "feasibility" || !studyDocuments.some(d => d.id === studyCategory) || receipt))
+        throw fail(400, "تصنيف مرفق الدراسة غير صحيح.");
+      const f = await saveFile(req, o.service === "feasibility" && !receipt);
+      if (studyCategory) f.studyCategory = studyCategory;
       if (receipt) { f.purpose = "payment_receipt"; f.amount = o.amount; f.contractId = o.currentContract || null; }
       f.by = auth.u.name;
       f.role = auth.u.role;
@@ -868,6 +877,18 @@ async function api(req, res, url) {
         throw fail(403, "يتاح التنزيل بعد تأكيد الدفع.");
       return sendFile(res, o.productFile);
     }
+    if (method === "POST" && action === "study-documents") {
+      if (o.service !== "feasibility") throw fail(400, "هذا الطلب ليس دراسة جدوى.");
+      const b = await jsonBody(req);
+      const result = await db.update("order", oid, (x) => {
+        if (!["received", "reviewing"].includes(x.status) || x.currentContract) throw fail(409, "توثق المستندات قبل تجهيز العقد؛ أرسل الاستكمال في محادثة الطلب.");
+        x.study.documents = validateStudyDocuments(x.study, b.documents, x.files);
+        delete x.study.inputsReviewed;
+        event(x, "تم توثيق مستندات الدراسة والمتطلبات الناقصة", auth.u);
+        return x;
+      });
+      return json(res, 200, safeOrder(result));
+    }
     if (method === "POST" && action === "checkout-options") {
       if (auth.u.role !== "admin" && auth.u.id !== o.owner)
         throw fail(403, "هذه الخطوة متاحة لصاحب الطلب فقط.");
@@ -886,13 +907,21 @@ async function api(req, res, url) {
       const baseService = o.type === "service"
         ? services.find((service) => service.id === o.service)
         : null;
+      if (o.study && !o.study.documents) throw fail(409, "أكمل خطوة مستندات دراسة الجدوى قبل العقد.");
       const baseAmount = o.type === "service"
-        ? baseService?.pricing?.from
+        ? (o.study?.plan.amount ?? baseService?.pricing?.from)
         : (o.subtotal || o.amount);
       if (!Number.isSafeInteger(baseAmount) || baseAmount < 100)
         throw fail(409, "تعذر تحديد سعر الطلب الأساسي.");
       const subtotal = baseAmount + selectedAddons.reduce((sum, addon) => sum + (addon.pricing?.from || 0), 0);
       const details = checkoutContractDetails(baseService, selectedAddons);
+      if (o.study) {
+        details.deliverables = [...o.study.plan.includes, ...selectedAddons.flatMap(a => a.includes || [a.title])].join("\n");
+        details.revisions = o.study.plan.revisions;
+        details.supportDays = 0;
+        details.exclusions += "\n" + o.study.notice;
+        details.clientRequirements = "تقديم بيانات صحيحة وعروض أسعار ومعلومات التشغيل والمبيعات. تستكمل البيانات الناقصة بالتنسيق مع الفريق قبل بدء المدة؛ يعتمد العميل أي افتراضات كتابةً. التوقعات تقديرية وليست تعهدًا بالربح أو قبول التمويل.";
+      }
       const providerDetails = {
         ...details.provider,
         email: process.env.BUSINESS_EMAIL || "antlaqh2030@gmail.com",
@@ -900,7 +929,7 @@ async function api(req, res, url) {
       };
       const agreementLines = [
         o.type === "service"
-          ? `${baseService.title}: ${baseService.pricing.scope}`
+          ? (o.study ? `${o.study.plan.title}: ${o.study.plan.includes.join("؛ ")}\n${o.study.notice}` : `${baseService.title}: ${baseService.pricing.scope}`)
           : `المنتج الرقمي: ${o.title} — ${o.description}`,
         ...selectedAddons.map((addon) => `${addon.title}: ${addon.pricing.scope}`),
       ];
@@ -909,7 +938,7 @@ async function api(req, res, url) {
         version: o.contracts.length + 1,
         agreement: agreementLines.join("\n\n"),
         subtotal,
-        deliveryDate: o.targetDate && /^\d{4}-\d{2}-\d{2}$/.test(o.targetDate) ? o.targetDate : null,
+        deliveryDate: !o.study && o.targetDate && /^\d{4}-\d{2}-\d{2}$/.test(o.targetDate) ? o.targetDate : null,
         terms: "أقر العميل بأنه راجع وصف الطلب والخدمات الإضافية والسعر والشروط والأحكام، وأن التنفيذ يبدأ بعد تأكيد استلام الدفع واستكمال متطلبات البدء.",
         parties: {
           provider: details.provider.legalName,
@@ -927,7 +956,8 @@ async function api(req, res, url) {
         contact: providerDetails,
         customer: o.customer,
         siteOptions: o.siteOptions,
-        serviceDetails: baseService,
+        studyDetails: o.study,
+        serviceDetails: o.study ? { ...baseService, includes:o.study.plan.includes, pricing:{...baseService.pricing,from:o.study.plan.amount,scope:o.study.plan.includes.join("؛ ")} } : baseService,
         selectedAddons,
         requestDetails: {
           title: o.title,
@@ -1013,7 +1043,8 @@ async function api(req, res, url) {
           contact: providerDetails,
           customer: x.customer,
           siteOptions: x.siteOptions,
-          serviceDetails: services.find((service) => service.id === x.service) || null,
+          studyDetails: x.study,
+          serviceDetails: x.study ? { ...services.find(service => service.id === x.service), includes:x.study.plan.includes, pricing:{ ...x.advertisedPrice } } : services.find((service) => service.id === x.service) || null,
           requestDetails: { title: x.title, description: x.description, budget: x.budget || "", targetDate: x.targetDate || "" },
         });
         q.version = x.contracts.length + 1;
@@ -1104,6 +1135,18 @@ async function api(req, res, url) {
       });
       return json(res, 200, result);
     }
+    if (method === "POST" && action === "study-ready") {
+      authorize(auth, true);
+      const b = await jsonBody(req);
+      if (!o.study || b.reviewed !== true) throw fail(400, "أكد مراجعة اكتمال بيانات الدراسة.");
+      const result = await db.update("order", oid, x => {
+        if (!x.study.documents || !["received", "reviewing", "quoted", "awaiting_payment", "paid"].includes(x.status)) throw fail(409, "تتم مراجعة البيانات بعد توثيق المستندات وقبل بدء التنفيذ.");
+        x.study.inputsReviewed = { at: now(), by: auth.u.id };
+        event(x, "أكد الفريق اكتمال بيانات دراسة الجدوى أو اعتماد الافتراضات مع العميل", auth.u);
+        return x;
+      });
+      return json(res, 200, safeOrder(result));
+    }
     if (method === "POST" && action === "status") {
       authorize(auth, true);
       const b = await jsonBody(req);
@@ -1119,6 +1162,8 @@ async function api(req, res, url) {
         cancelled: [],
       };
       const result = await db.update("order", oid, (x) => {
+        if (x.study && b.status === "in_progress" && !x.study.inputsReviewed)
+          throw fail(409, "تحقق من اكتمال بيانات الدراسة واعتماد الافتراضات مع العميل قبل بدء التنفيذ.");
         if (!(transitions[x.status] || []).includes(b.status))
           throw fail(409, "هذا الانتقال غير متاح في المرحلة الحالية.");
         x.status = b.status;
