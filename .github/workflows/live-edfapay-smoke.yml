@@ -27,26 +27,27 @@ jobs:
           for i in $(seq 1 20); do
             code="$(curl -L -sS -o /tmp/config.json -w "%{http_code}" "$BASE/api/config" || true)"
             if [ "$code" = "200" ]; then
-              node - <<'NODE'
-              const fs=require("fs");
-              const c=JSON.parse(fs.readFileSync("/tmp/config.json","utf8"));
-              if (c.environment!=="production") throw new Error("Live app is not reporting production mode");
-              if (!c.paymentMethods?.bankTransfer?.available) throw new Error("Bank transfer is unexpectedly unavailable");
-              if (!c.paymentMethods?.edfapay?.available) throw new Error("EdfaPay is not enabled in live config");
-              if (c.paymentMethods.edfapay.mode!=="sandbox") throw new Error("Expected EdfaPay sandbox mode, got: "+c.paymentMethods.edfapay.mode);
-              if (c.payments!=="edfapay_and_bank_transfer") throw new Error("Unexpected payments mode: "+c.payments);
-              if (!String(c.siteOrigin||"").startsWith("https://antlaqh.com")) throw new Error("Unexpected siteOrigin: "+c.siteOrigin);
-              console.log("LIVE_CONFIG_OK", JSON.stringify({
-                environment:c.environment,
-                payments:c.payments,
-                edfapay:c.paymentMethods.edfapay,
-                siteOrigin:c.siteOrigin
-              }));
-NODE
-              ok=1
-              break
+              if node -e '
+                const fs=require("fs");
+                const c=JSON.parse(fs.readFileSync("/tmp/config.json","utf8"));
+                if (c.environment!=="production") throw new Error("Live app is not reporting production mode");
+                if (!c.paymentMethods?.bankTransfer?.available) throw new Error("Bank transfer is unexpectedly unavailable");
+                if (!c.paymentMethods?.edfapay?.available) throw new Error("EdfaPay is not enabled in live config");
+                if (c.paymentMethods.edfapay.mode!=="sandbox") throw new Error("Expected EdfaPay sandbox mode, got: "+c.paymentMethods.edfapay.mode);
+                if (c.payments!=="edfapay_and_bank_transfer") throw new Error("Unexpected payments mode: "+c.payments);
+                if (!String(c.siteOrigin||"").startsWith("https://antlaqh.com")) throw new Error("Unexpected siteOrigin: "+c.siteOrigin);
+                console.log("LIVE_CONFIG_OK", JSON.stringify({
+                  environment:c.environment,
+                  payments:c.payments,
+                  edfapay:c.paymentMethods.edfapay,
+                  siteOrigin:c.siteOrigin
+                }));
+              '; then
+                ok=1
+                break
+              fi
             fi
-            echo "Attempt $i: /api/config returned HTTP $code"
+            echo "Attempt $i: /api/config returned HTTP $code or config not ready"
             sleep 15
           done
           if [ "$ok" != "1" ]; then
