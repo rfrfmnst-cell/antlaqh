@@ -155,3 +155,10 @@ test("readiness prioritizes a missing API key over a stale disabled flag", () =>
   assert.equal(checkout.readiness.configured,false);
   assert.equal(checkout.readiness.reason,"missing_api_key");
 });
+
+test("provider rejection identifies HTTP cause without disclosing its response body", async () => {
+  for (const [status, message] of [[401,/بيانات اعتماد/],[403,/بيانات اعتماد/],[400,/بيانات جلسة/],[422,/بيانات جلسة/],[429,/عدد كبير/],[503,/مؤقتًا/]]) {
+    const checkout=createEdfapayCheckout({env:{NODE_ENV:"test",EDFAPAY_API_KEY:"test-key-"+"x".repeat(32)},request:async()=>({ok:false,status,json:async()=>{throw Error("provider secrets must not be read");}})});
+    await assert.rejects(checkout.initiate({order:acceptedOrder,providerOrderId:"ANT-TEST-REJECT123"}),error=>error.status===502 && message.test(error.message) && error.message.includes(`HTTP ${status}`));
+  }
+});
