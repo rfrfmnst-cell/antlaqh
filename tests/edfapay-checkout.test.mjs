@@ -16,7 +16,7 @@ const acceptedOrder = {
 test("EdfaPay hosted checkout is opt-in and never exposes a key in readiness", async () => {
   const checkout = createEdfapayCheckout({ env: { NODE_ENV:"test", APP_URL:"http://localhost" }, request: async()=>{ throw Error("unused"); } });
   assert.equal(checkout.readiness.configured, false);
-  assert.equal(checkout.readiness.reason, "disabled");
+  assert.equal(checkout.readiness.reason, "missing_api_key");
   assert.equal(JSON.stringify(checkout.readiness).includes("key"), false);
   await assert.rejects(checkout.initiate({ order: acceptedOrder, providerOrderId:"ANT-TEST-1-ABC12345" }), { status:503 });
 });
