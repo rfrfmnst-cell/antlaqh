@@ -10,6 +10,7 @@ import { createStore } from "./lib/store.js";
 import { getLaunchOffer, claimPromotion, priceBreakdown } from "./lib/promotion.js";
 import { contractMetadata, validateContractDetails, createContractDocument } from "./lib/contracts.js";
 import { createRecovery } from "./lib/recovery.js";
+import { createMetaWebhook } from "./lib/meta-webhook.js";
 import {
   id,
   digest,
@@ -74,6 +75,7 @@ const db = await createStore({
     production && process.env.DB_ALLOW_SQLITE_FALLBACK !== "false",
 });
 const recovery = await createRecovery({ db });
+const metaWebhook = createMetaWebhook({ db });
 let businessWhatsapp = "966553575760";
 try { businessWhatsapp = normalizePhone(process.env.BUSINESS_WHATSAPP_PHONE || "+966553575760").slice(1); } catch {}
 const now = () => new Date().toISOString();
@@ -373,6 +375,19 @@ async function api(req, res, url) {
   const path = url.pathname,
     method = req.method;
   const ip = clientIp(req);
+  // Meta signs its server-to-server callbacks; browser session/CSRF rules still apply elsewhere.
+  if (path === "/api/webhooks/meta/whatsapp") {
+    if (method === "GET") {
+      const challenge = metaWebhook.challenge(url.searchParams);
+      res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
+      return res.end(challenge);
+    }
+    if (method === "POST") {
+      rate(`meta:${ip}`, 600, 60000);
+      return json(res, 200, await metaWebhook.receive(req));
+    }
+    throw fail(405, "طريقة غير مدعومة.");
+  }
   if (!["GET", "HEAD"].includes(method)) {
     if (req.headers.origin !== origin)
       throw fail(403, "طلب من مصدر غير مسموح. أعد فتح المنصة.");
@@ -1132,6 +1147,7 @@ async function api(req, res, url) {
         email: { ready: recovery.readiness.emailReady },
         whatsapp: { ready: recovery.readiness.whatsappReady, direct: true, provider: recovery.readiness.whatsappReady ? "twilio" : null },
         sms: { configured: smsReady },
+        meta: metaWebhook.readiness,
         assistant: { mode: process.env.ASSISTANT_MODE === "openai" ? "openai" : "guided" },
         payment: "bank_transfer",
       });
