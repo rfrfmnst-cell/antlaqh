@@ -16,6 +16,7 @@ const acceptedOrder = {
 test("EdfaPay hosted checkout is opt-in and never exposes a key in readiness", async () => {
   const checkout = createEdfapayCheckout({ env: { NODE_ENV:"test", APP_URL:"http://localhost" }, request: async()=>{ throw Error("unused"); } });
   assert.equal(checkout.readiness.configured, false);
+  assert.equal(checkout.readiness.reason, "disabled");
   assert.equal(JSON.stringify(checkout.readiness).includes("key"), false);
   await assert.rejects(checkout.initiate({ order: acceptedOrder, providerOrderId:"ANT-TEST-1-ABC12345" }), { status:503 });
 });
@@ -95,4 +96,15 @@ test("explicit false still disables sandbox checkout", async () => {
   });
   assert.equal(checkout.readiness.configured,false);
   await assert.rejects(checkout.initiate({order:acceptedOrder,providerOrderId:"ANT-TEST-1-SANDBOX2"}),{status:503});
+});
+
+
+test("readiness reports missing key without exposing secret material", () => {
+  const checkout=createEdfapayCheckout({
+    env:{NODE_ENV:"test",APP_URL:"http://localhost:3000",EDFAPAY_CHECKOUT_ENABLED:"true"},
+    request:async()=>{throw Error("unused");},
+  });
+  assert.equal(checkout.readiness.configured,false);
+  assert.equal(checkout.readiness.reason,"missing_api_key");
+  assert.equal(JSON.stringify(checkout.readiness).includes("API_KEY"),false);
 });
