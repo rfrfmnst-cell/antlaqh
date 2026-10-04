@@ -263,3 +263,13 @@ test("mobile menu closes on the current navigation link and on Escape", async ()
   assert.equal(nav.classList.contains("open"), false);
   assert.equal(button.focusCount, 1);
 });
+
+test('admin inbox escapes customer content and saves replies through existing order form',async()=>{
+ const order={id:'a'.repeat(36),number:'ANT-1',title:'<script>bad</script>',customer:{name:'عميل'},messages:[{role:'customer',message:'<img src=x>',at:'2026-10-04T10:00:00Z'}]};
+ const ui=await app({hash:'#/admin/messages',session:{user:{id:'admin',name:'الإدارة',role:'admin'}},fetch:async p=>p==='/api/orders?all=1'?response([order]):null});
+ const html=ui.nodes.get('#main').innerHTML;assert.match(html,/صندوق رسائل الطلبات/);assert.match(html,/آخر رد من العميل/);assert.match(html,/data-form="message"/);assert.match(html,/maxlength="4000"/);assert.doesNotMatch(html,/<script>bad/);assert.doesNotMatch(html,/<img src=x>/);assert.match(html,/&lt;img/);
+});
+test('admin channel page describes disabled delivery honestly and makes no outbound send',async()=>{
+ const ui=await app({hash:'#/admin/channels',session:{user:{id:'admin',name:'الإدارة',role:'admin'}},fetch:async p=>p==='/api/admin/channels'?response({email:{ready:false},whatsapp:{ready:false,direct:true},sms:{configured:false}}):null});
+ assert.match(ui.nodes.get('#main').innerHTML,/Meta لا يرسل SMS/);assert.match(ui.nodes.get('#main').innerHTML,/الإرسال الآلي غير مفعّل/);assert.match(ui.nodes.get('#main').innerHTML,/قنوات الإرسال/);assert.equal(ui.requests.some(r=>r.options?.method==='POST'),false);
+});

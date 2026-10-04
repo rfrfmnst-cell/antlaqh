@@ -4,6 +4,7 @@ for (const file of [
   "server.cjs",
   "server.js",
   "lib/store.js",
+  "lib/admin-dashboard.js",
   "lib/catalog.js",
   "lib/assistant.js",
   "lib/guided-assistant.js",
