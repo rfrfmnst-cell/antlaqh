@@ -108,3 +108,35 @@ test("readiness reports missing key without exposing secret material", () => {
   assert.equal(checkout.readiness.reason,"missing_api_key");
   assert.equal(JSON.stringify(checkout.readiness).includes("API_KEY"),false);
 });
+
+
+test("production checkout auto-enables when the production API key is present unless explicitly disabled", async () => {
+  let call;
+  const checkout=createEdfapayCheckout({
+    env:{
+      NODE_ENV:"production",
+      APP_URL:"https://antlaqh.com",
+      EDFAPAY_API_KEY:"live-key-"+"p".repeat(32),
+    },
+    request:async(url,options)=>{
+      call={url,options};
+      return {ok:true,json:async()=>({code:200,data:{redirectUrl:"https://app.edfapay.com/pay/checkout?sessionId=live-test"}})};
+    },
+  });
+  assert.equal(checkout.readiness.configured,true);
+  assert.equal(checkout.readiness.mode,"production");
+  await checkout.initiate({order:acceptedOrder,providerOrderId:"ANT-TEST-1-LIVE0001"});
+  assert.equal(call.url,"https://app-api.edfapay.com/api/v1/payment-gateway/initiate");
+  assert.equal(call.options.headers["X-API-KEY"],"live-key-"+"p".repeat(32));
+
+  const disabled=createEdfapayCheckout({
+    env:{
+      NODE_ENV:"production",
+      APP_URL:"https://antlaqh.com",
+      EDFAPAY_CHECKOUT_ENABLED:"false",
+      EDFAPAY_API_KEY:"live-key-"+"p".repeat(32),
+    },
+    request:async()=>{throw Error("unused");},
+  });
+  assert.equal(disabled.readiness.configured,false);
+});
