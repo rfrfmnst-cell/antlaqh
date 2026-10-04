@@ -29,6 +29,13 @@ jobs:
               }));
             '
           fi
+          appjs="$(curl -L -sS -o /tmp/app.js -w "%{http_code}" "$BASE/app.js" || true)"
+          echo "APP_JS_HTTP=$appjs"
+          if grep -q 'edfapay-payment' /tmp/app.js 2>/dev/null; then
+            echo "LIVE_FRONTEND_HAS_EDFAPAY=true"
+          else
+            echo "LIVE_FRONTEND_HAS_EDFAPAY=false"
+          fi
           hook="$(curl -sS -o /tmp/hook.txt -w "%{http_code}" "$BASE/api/webhooks/edfapay" || true)"
           echo "WEBHOOK_GET_HTTP=$hook"
           printf "WEBHOOK_GET_BODY="
