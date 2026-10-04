@@ -54,7 +54,6 @@ test("sandbox deployment aliases use the sandbox key without requiring the produ
     env: {
       NODE_ENV:"test",
       APP_URL:"http://localhost:3000",
-      EDFAPAY_CHECKOUT_ENABLED:"true",
       EDFAPAY_SANDBOX_API_KEY:"sandbox-key-"+"s".repeat(32),
     },
     origin:"http://localhost:3000",
@@ -81,4 +80,19 @@ test("checkout rejects forged states, missing contact details, and non-EdfaPay r
   assert.equal(called,0);
   await assert.rejects(checkout.initiate({order:acceptedOrder,providerOrderId:"ANT-TEST-1-ABC12345"}),{status:502});
   assert.equal(called,1);
+});
+
+
+test("explicit false still disables sandbox checkout", async () => {
+  const checkout=createEdfapayCheckout({
+    env:{
+      NODE_ENV:"test",
+      APP_URL:"http://localhost:3000",
+      EDFAPAY_CHECKOUT_ENABLED:"false",
+      EDFAPAY_SANDBOX_API_KEY:"sandbox-key-"+"s".repeat(32),
+    },
+    request:async()=>{throw Error("unused");},
+  });
+  assert.equal(checkout.readiness.configured,false);
+  await assert.rejects(checkout.initiate({order:acceptedOrder,providerOrderId:"ANT-TEST-1-SANDBOX2"}),{status:503});
 });
