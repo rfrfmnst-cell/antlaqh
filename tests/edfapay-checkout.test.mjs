@@ -141,3 +141,17 @@ test("production checkout stays enabled when the production API key is present e
   assert.equal(legacyFalse.readiness.configured,true);
   assert.equal(legacyFalse.readiness.mode,"production");
 });
+
+
+test("readiness prioritizes a missing API key over a stale disabled flag", () => {
+  const checkout=createEdfapayCheckout({
+    env:{
+      NODE_ENV:"production",
+      APP_URL:"https://antlaqh.com",
+      EDFAPAY_CHECKOUT_ENABLED:"false",
+    },
+    request:async()=>{throw Error("unused");},
+  });
+  assert.equal(checkout.readiness.configured,false);
+  assert.equal(checkout.readiness.reason,"missing_api_key");
+});
