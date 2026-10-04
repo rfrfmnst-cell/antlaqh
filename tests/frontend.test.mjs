@@ -23,7 +23,7 @@ test("ready websites preserve template and promotion without customer login", as
   const ui = await app({hash:"#/ready-websites",settings});
   assert.match(ui.nodes.get("#main").innerHTML,/\/demos\/business\//);
   assert.match(ui.nodes.get("#main").innerHTML,/template=portfolio&promo=ANTLAQH20/);
-  assert.match(ui.nodes.get("#footer").innerHTML,/التحويل البنكي هو وسيلة الدفع الوحيدة حاليًا/);
+  assert.match(ui.nodes.get("#footer").innerHTML,/التحويل البنكي متاح حاليًا/);
   ui.location.hash="#/start?service=ready-website&template=portfolio&promo=ANTLAQH20";
   await ui.render();
   assert.match(ui.nodes.get("#main").innerHTML,/name="customerName"/);
@@ -331,4 +331,12 @@ test('admin inbox escapes customer content and saves replies through existing or
 test('admin channel page describes disabled delivery honestly and makes no outbound send',async()=>{
  const ui=await app({hash:'#/admin/channels',session:{user:{id:'admin',name:'الإدارة',role:'admin'}},fetch:async p=>p==='/api/admin/channels'?response({email:{ready:false},whatsapp:{ready:false,direct:true},sms:{configured:false}}):null});
  assert.match(ui.nodes.get('#main').innerHTML,/Meta لا يرسل SMS/);assert.match(ui.nodes.get('#main').innerHTML,/الإرسال الآلي غير مفعّل/);assert.match(ui.nodes.get('#main').innerHTML,/قنوات الإرسال/);assert.equal(ui.requests.some(r=>r.options?.method==='POST'),false);
+});
+
+test("footer follows electronic payment availability", async () => {
+  const ui = await app({settings:{...config,paymentMethods:{edfapay:{available:true}}}});
+  const footer = ui.nodes.get("#footer").innerHTML;
+  for (const brand of ["VISA", "Mastercard", "mada", "Apple Pay"]) assert.ok(footer.includes(brand));
+  assert.match(footer,/الدفع الإلكتروني عبر مبسط \/ EdfaPay متاح/);
+  assert.doesNotMatch(footer,/وسيلة الدفع الوحيدة/);
 });
