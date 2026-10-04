@@ -12,6 +12,7 @@ import { getLaunchOffer, claimPromotion, priceBreakdown } from "./lib/promotion.
 import { contractMetadata, validateContractDetails, createContractDocument } from "./lib/contracts.js";
 import { createRecovery } from "./lib/recovery.js";
 import { createMetaWebhook } from "./lib/meta-webhook.js";
+import { createEdfapayWebhook, edfapayCallbackPath } from "./lib/edfapay-webhook.js";
 import {
   id,
   digest,
@@ -78,6 +79,7 @@ const db = await createStore({
 });
 const recovery = await createRecovery({ db });
 const metaWebhook = createMetaWebhook({ db });
+const edfapayWebhook = createEdfapayWebhook({ db, origin });
 let businessWhatsapp = "966553575760";
 try { businessWhatsapp = normalizePhone(process.env.BUSINESS_WHATSAPP_PHONE || "+966553575760").slice(1); } catch {}
 const now = () => new Date().toISOString();
@@ -377,6 +379,27 @@ async function api(req, res, url) {
   const path = url.pathname,
     method = req.method;
   const ip = clientIp(req);
+  if (path === edfapayCallbackPath) {
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    if (method !== "POST") {
+      res.setHeader("Allow", "POST");
+      res.writeHead(405);
+      return res.end("ERROR");
+    }
+    try {
+      rate(`edfapay:${ip}`, 120, 60000);
+      rate("edfapay:total", 600, 60000);
+      const acknowledgement = await edfapayWebhook.receive(req, url.searchParams);
+      res.writeHead(200);
+      return res.end(acknowledgement);
+    } catch (error) {
+      if (!error.status) console.error("EdfaPay receipt failed:", error.code || error.name);
+      if (error.status === 429) res.setHeader("Retry-After", "60");
+      res.writeHead(error.status || 500);
+      return res.end("ERROR");
+    }
+  }
   // Meta signs its server-to-server callbacks; browser session/CSRF rules still apply elsewhere.
   if (path === "/api/webhooks/meta/whatsapp") {
     if (method === "GET") {
@@ -1193,9 +1216,13 @@ async function api(req, res, url) {
         whatsapp: { ready: recovery.readiness.whatsappReady, direct: true, provider: recovery.readiness.whatsappReady ? "twilio" : null },
         sms: { configured: smsReady },
         meta: metaWebhook.readiness,
+        edfapay: { ...edfapayWebhook.readiness, callbackUrl: edfapayWebhook.callbackUrl },
         assistant: { mode: process.env.ASSISTANT_MODE === "openai" ? "openai" : "guided" },
         payment: "bank_transfer",
       });
+    if (method === "GET" && path === "/api/admin/payments/notifications")
+      return json(res, 200, (await db.list("edfapayReceipt"))
+        .sort((a, b) => b.receivedAt - a.receivedAt).slice(0, 50));
     if (method === "GET" && path === "/api/admin/summary") {
       const orders = await db.list("order"),
         users = await db.list("user"),
