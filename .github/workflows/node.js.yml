@@ -29,3 +29,8 @@ jobs:
     - run: npm ci
     - run: npm run build
     - run: npm test
+    - name: EdfaPay sandbox smoke test
+      env:
+        EDFAPAY_SANDBOX_API_KEY: ${{ secrets.EDFAPAY_SANDBOX_API_KEY }}
+        EDFAPAY_SANDBOX_INITIATE_URL: ${{ vars.EDFAPAY_SANDBOX_INITIATE_URL }}
+      run: node scripts/edfapay-sandbox-smoke.mjs
