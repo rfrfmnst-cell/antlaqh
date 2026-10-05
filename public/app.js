@@ -324,27 +324,33 @@ function coverPicker(p = {}) {
 function logo(compact = false) {
   return `<a class="brand ${compact ? "brand-footer" : ""}" href="#/" aria-label="إنطلاقة للتجارة الإلكترونية، الصفحة الرئيسية"><img class="brand-logo" src="/assets/brand-logo-transparent.png" alt="شعار إنطلاقة" width="112" height="96"><span class="brand-name">إنطلاقة<span>للتجارة الإلكترونية</span></span></a>`;
 }
+function businessTrust() {
+  const v=state.config?.businessVerification;
+  if (!v?.documentNumber && !v?.verified) return "";
+  return `<section class="footer-trust" aria-label="بيانات النشاط والتوثيق"><span class="trust-symbol" aria-hidden="true">${icon(v.verified ? "check" : "file")}</span><div><strong>${v.verified ? "موثق في منصة الأعمال" : "بيانات نشاط انطلاقة"}</strong>${v.documentNumber ? `<p>رقم وثيقة العمل الحر <b dir="ltr">${E(v.documentNumber)}</b></p>` : ""}${v.verified ? `<p>رقم شهادة توثيق التجارة الإلكترونية <b dir="ltr">${E(v.certificateNumber)}</b></p>` : ""}</div><a href="${E(v.verified ? v.certificateUrl : v.inquiryUrl)}" target="_blank" rel="noopener noreferrer">${v.verified ? "عرض شهادة التوثيق" : "الاستعلام عبر منصة الأعمال"} ${icon("arrow")}</a></section>`;
+}
+function footer() {
+  const phone=state.config?.businessPhone || "+966553575760", email=state.config?.businessEmail || "antlaqh2030@gmail.com";
+  const label=phone==="+966553575760" ? "0553575760" : phone;
+  return `<div class="wrap footer-cta"><div><span class="footer-eyebrow">ابدأ بخطوة واضحة</span><h2>من فكرتك، إلى انطلاقتك.</h2><p>اختر ما يحتاجه مشروعك، أو دعنا نساعدك في تحديد البداية.</p></div><div class="footer-cta-actions">${link("/store","استكشف كل المنتجات "+icon("arrow"),"footer-start")}${link("/start","ابدأ مشروعك","footer-outline")}</div></div><div class="wrap footer-top"><div class="footer-brand">${logo(true)}<p>حلول رقمية تنطلق من احتياجك. مواقع ومتاجر، محتوى وتسويق، وتقنيات تدعم خطوتك القادمة.</p><span class="footer-signature">فكرة واضحة. بداية تستحق.</span></div><div class="footer-column"><h3>كل ما تحتاجه</h3><nav aria-label="المنتجات والخدمات"><a href="#/store">كل المنتجات والخدمات</a><a href="#/store?kind=services">الخدمات الرقمية</a><a href="#/store?kind=templates">المواقع الجاهزة</a><a href="#/store?kind=products">المنتجات الرقمية</a><a href="#/service/content-production">صناعة المحتوى</a><a href="#/service/feasibility">دراسات الجدوى</a></nav></div><div class="footer-column"><h3>معك في كل خطوة</h3><nav aria-label="المساعدة والمتابعة"><a href="#/start">بدء الطلب والمتابعة</a><a href="#/support">الدعم والمساعدة</a><button type="button" data-assistant-open>مساعد انطلاقة ${icon("spark")}</button><a href="#/about">عن انطلاقة</a><a href="#/terms">الشروط والأحكام</a><a href="#/privacy">سياسة الخصوصية</a>${state.config?.integrations?.ga4MeasurementId ? `<button type="button" data-analytics-settings>خيارات قياس الزيارات</button>` : ""}</nav></div><div class="footer-column footer-reach"><h3>لنتحدث عن مشروعك</h3><p>من أول سؤال، وحتى تسليم مشروعك.</p><div class="footer-contact"><a href="tel:${E(phone)}"><span>اتصل بنا</span><b dir="ltr">${E(label)}</b></a><a href="mailto:${E(email)}"><span>البريد الإلكتروني</span><b dir="ltr">${E(email)}</b></a>${whatsappLink("تواصل عبر WhatsApp","text-link")}</div></div></div><div class="wrap">${businessTrust()}</div><div class="wrap footer-utility"><div class="footer-payment"><span class="footer-eyebrow">الدفع بعد مراجعة العقد</span>${paymentIcons()}</div>${shareLinks()}</div><div class="wrap footer-bottom"><span>© ${new Date().getFullYear()} انطلاقة للتجارة الإلكترونية. جميع الحقوق محفوظة.</span><a href="#/store">كل المنتجات، في مكان واحد ${icon("arrow")}</a></div>${whatsappLink("تواصل معنا","floating-contact")}`;
+}
 function header(path) {
   const admin = state.user?.role === "admin";
-  const businessPhone = state.config?.businessPhone || "+966553575760";
-  const businessEmail = state.config?.businessEmail || "antlaqh2030@gmail.com";
-  const phoneLabel = businessPhone === "+966553575760" ? "0553575760" : businessPhone;
   $("#header").innerHTML =
     `<div class="header-accent"></div><div class="wrap header-inner">${logo()}<nav class="main-nav" id="main-nav" aria-label="التنقل الرئيسي">${[
       ["/", "الرئيسية"],
-      ["/services", "حلولنا"],
-      ["/store", "المتجر"],
+      ["/store", "كل المنتجات"],
+      ["/ready-websites", "المواقع الجاهزة"],
       ["/about", "عن إنطلاقة"],
     ]
       .map(
         ([p, l]) =>
-          `<a href="#${p}" class="${path === p ? "active" : ""}" ${path === p ? 'aria-current="page"' : ""}>${l}</a>`,
+          `<a href="#${p}" class="${(path === p || p === "/store" && (path === "/services" || path.startsWith("/service/") || path.startsWith("/checkout/"))) ? "active" : ""}" ${(path === p || p === "/store" && (path === "/services" || path.startsWith("/service/") || path.startsWith("/checkout/"))) ? 'aria-current="page"' : ""}>${l}</a>`,
       )
       .join(
         "",
       )}</nav><div class="header-actions">${admin ? `<a class="user-chip" href="#/admin"><span class="avatar">${E(state.user.name.slice(0, 1))}</span><span class="user-name">${E(state.user.name.split(" ")[0])}</span></a>` : ""}${link("/start", "ابدأ مشروعك " + icon("arrow"), "header-start")}<button class="btn ghost menu-button" data-action="menu" aria-label="فتح القائمة" aria-expanded="false" aria-controls="main-nav">${icon("menu")}</button></div></div>`;
-  $("#footer").innerHTML =
-    `<div class="wrap footer-cta"><div><span class="footer-eyebrow">خطوتك القادمة تبدأ هنا</span><h2>فكرتك تستحق انطلاقة.</h2><p>لنحوّل ما تتخيّله إلى حضور رقمي يعبّر عن مشروعك.</p></div><a class="btn footer-start" href="#/start">ابدأ مشروعك ${icon("arrow")}</a></div><div class="wrap footer-top"><div class="footer-brand">${logo(true)}<p>نصنع لمشروعك بداية مدروسة، وحضورًا رقميًا يعبّر عنه. من أول فكرة إلى تجربة تستحق أن تُشارك.</p><span class="footer-signature">بدايات مدروسة. أثر مستمر.</span></div><div class="footer-column"><h3>اكتشف انطلاقة</h3><nav aria-label="اكتشف انطلاقة"><a href="#/services">حلولنا الرقمية</a><a href="#/store">المتجر الرقمي</a><a href="#/ready-websites">المواقع الجاهزة</a><a href="#/launch-offer">عرض الإطلاق</a><a href="#/about">قصتنا وطريقتنا</a></nav></div><div class="footer-column"><h3>المساعدة والمتابعة</h3><nav aria-label="المساعدة والمتابعة"><a href="#/start">ابدأ أو تابع طلبك</a><a href="#/support">الدعم والمساعدة</a><button type="button" data-assistant-open>مساعد انطلاقة ${icon("spark")}</button><a href="#/terms">الشروط والأحكام</a><a href="#/privacy">سياسة الخصوصية</a>${state.config?.integrations?.ga4MeasurementId ? `<button type="button" data-analytics-settings>خيارات قياس الزيارات</button>` : ""}</nav></div><div class="footer-column footer-reach"><h3>لنتحدث عن مشروعك</h3><p>نحن بالقرب منك، من أول سؤال إلى الخطوة التالية.</p><div class="footer-contact"><a href="tel:${E(businessPhone)}"><span>اتصل بنا</span><b dir="ltr">${E(phoneLabel)}</b></a><a href="mailto:${E(businessEmail)}"><span>البريد الإلكتروني</span><b dir="ltr">${E(businessEmail)}</b></a>${whatsappLink("تواصل عبر WhatsApp","text-link")}</div></div></div><div class="wrap footer-utility"><div class="footer-payment"><span class="footer-eyebrow">الدفع بعد الاتفاق</span>${paymentIcons()}</div>${shareLinks()}</div><div class="wrap footer-bottom"><span>© ${new Date().getFullYear()} إنطلاقة للتجارة الإلكترونية. جميع الحقوق محفوظة.</span><a href="#/">العودة للرئيسية ${icon("arrow")}</a></div><a class="floating-contact" href="https://wa.me/966553575760?text=${encodeURIComponent("مرحبًا انطلاقة، أود الاستفسار عن خدماتكم.")}" target="_blank" rel="noopener noreferrer" aria-label="راسل انطلاقة عبر WhatsApp على ${E(phoneLabel)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 3h4l2 5-3 2c2 3 3 4 6 6l2-3 5 2v4c0 1-1 2-2 2C10 21 3 14 3 5c0-1 1-2 2-2Z"/></svg><span>راسلنا على WhatsApp</span></a>`;
+  $("#footer").innerHTML = footer();
 }
 
 function activeOffer() {
@@ -425,7 +431,7 @@ function serviceCards({ compact = false } = {}) {
   return (
     (compact
       ? state.config.services.filter((s) =>
-          ["website", "store", "apps", "identity", "ai", "marketing"].includes(
+          ["website", "store", "apps", "identity", "ai", "marketing", "content-production", "feasibility"].includes(
             s.id,
           ),
         )
@@ -453,7 +459,7 @@ function processSteps() {
     .join("")}</div>`;
 }
 function home() {
-  return `<div class="wrap">${launchBanner()}</div>${homepageAssistant()}<div class="home-intro"><div class="wrap"><section class="hero"><div class="hero-copy"><span class="eyebrow"><span class="status-dot"></span>إنطلاقة للتجارة الإلكترونية</span><h1>نخطط، ننفذ،<br><em>وننجح معك.</em></h1><p>نحوّل فكرتك إلى تجربة رقمية متكاملة؛ متجر يعبّر عنك، موقع يترك أثرًا، وحلول تنمو مع مشروعك.</p><div class="actions">${link("/start", "لنبدأ مشروعك " + icon("arrow"))}${link("/store", "تصفّح حلولنا", "secondary")}</div><div class="hero-note"><span>${icon("check")} تصميم يعكس هويتك</span><span>${icon("check")} رحلة واضحة من البداية</span></div></div><div class="hero-composition"><div class="geometry geometry-one" aria-hidden="true"></div><div class="hero-image"><img src="/assets/catalog-store.webp" alt="تصور إبداعي لمتجر إلكتروني بألوان إنطلاقة" width="1024" height="1024" fetchpriority="high"><div class="image-topline"><span><i></i> مصمّم لطموحك</span><span dir="ltr">INTLAKAH / DIGITAL</span></div><div class="image-caption"><div><small>من الفكرة إلى التجربة</small><strong>تفاصيل تصنع الفرق.</strong></div><span class="circle-arrow">${icon("arrow")}</span></div></div><div class="floating-note"><span class="floating-icon">${icon("bag")}</span><div><small>تجارتك، بأسلوبك.</small><strong>تجربة واحدة. احتمالات أوسع.</strong></div></div><div class="floating-mini"><img src="/assets/catalog-apps.webp" alt="تصور واجهة تطبيق" width="1024" height="1024"><span>حلول مترابطة <i>↗</i></span></div></div></section></div></div><div class="expertise-strip"><div class="wrap">${[
+  return `<div class="wrap">${launchBanner()}</div>${homepageAssistant()}<div class="home-intro"><div class="wrap"><section class="hero"><div class="hero-copy"><span class="eyebrow"><span class="status-dot"></span>إنطلاقة للتجارة الإلكترونية</span><h1>نخطط، ننفذ،<br><em>وننجح معك.</em></h1><p>نحوّل فكرتك إلى تجربة رقمية متكاملة؛ متجر يعبّر عنك، موقع يترك أثرًا، وحلول تنمو مع مشروعك.</p><div class="actions">${link("/start", "لنبدأ مشروعك " + icon("arrow"))}${link("/store", "كل المنتجات والخدمات", "secondary")}</div><div class="hero-note"><span>${icon("check")} تصميم يعكس هويتك</span><span>${icon("check")} رحلة واضحة من البداية</span></div></div><div class="hero-composition"><div class="geometry geometry-one" aria-hidden="true"></div><div class="hero-image"><img src="/assets/catalog-store.webp" alt="تصور إبداعي لمتجر إلكتروني بألوان إنطلاقة" width="1024" height="1024" fetchpriority="high"><div class="image-topline"><span><i></i> مصمّم لطموحك</span><span dir="ltr">INTLAKAH / DIGITAL</span></div><div class="image-caption"><div><small>من الفكرة إلى التجربة</small><strong>تفاصيل تصنع الفرق.</strong></div><span class="circle-arrow">${icon("arrow")}</span></div></div><div class="floating-note"><span class="floating-icon">${icon("bag")}</span><div><small>تجارتك، بأسلوبك.</small><strong>تجربة واحدة. احتمالات أوسع.</strong></div></div><div class="floating-mini"><img src="/assets/catalog-apps.webp" alt="تصور واجهة تطبيق" width="1024" height="1024"><span>حلول مترابطة <i>↗</i></span></div></div></section></div></div><div class="expertise-strip"><div class="wrap">${[
     ["bag", "تجارة إلكترونية"],
     ["globe", "مواقع ومنصات"],
     ["code", "تطبيقات وأنظمة"],
@@ -463,7 +469,7 @@ function home() {
     .map(([i, t]) => `<span>${icon(i)}${t}</span>`)
     .join(
       "",
-    )}</div></div><div class="wrap">${journey()}<section class="section" aria-labelledby="services-title"><div class="section-head"><div><div class="eyebrow">حلول تتكامل حول مشروعك</div><h2 id="services-title">ما تحتاجه للخطوة القادمة.</h2></div><div><p>من بناء الأساس إلى صناعة الأثر.<br>اختر بداية تناسبك، ودع الباقي علينا.</p></div></div><div class="service-grid">${serviceCards({ compact: true })}</div><div class="section-more">${link("/services", "اكتشف جميع خدماتنا " + icon("arrow"), "secondary")}</div></section><section class="platform-section"><div class="platform-copy"><div class="eyebrow">تفاصيل أكثر. تشتّت أقل.</div><h2>مشروعك واضح.<br>في كل خطوة.</h2><p>مساحة خاصة تجمع الاتفاق، والطلبات، والملفات، والتحديثات. لتبقى على اطلاع، وتتفرّغ لما يهمك.</p><ul class="feature-list"><li>${icon("check")}عرض سعر وعقد تراجعهما قبل التنفيذ</li><li>${icon("check")}مراحل ومرفقات مرتبطة بمشروعك</li><li>${icon("check")}تواصل مع الفريق في مكان واحد</li></ul>${link(state.user ? "/dashboard" : "/start", state.user ? "افتح متابعة مشروعك" : "ابدأ مشروعك دون تسجيل", "secondary")}</div><div class="workspace-preview" aria-label="تصور توضيحي لمساحة متابعة المشروع"><div class="preview-title"><span class="preview-brand">${icon("diamond")} مساحة مشروعك</span><span class="preview-label">تصوّر توضيحي</span></div><div class="preview-project"><span class="preview-project-icon">${icon("bag")}</span><div><small>الفصل القادم لمشروعك</small><h3>متجرك الإلكتروني</h3></div><span class="badge">رحلة متكاملة</span></div><div class="preview-progress"><span></span><span></span><span></span><span></span></div><div class="preview-milestones"><div>${icon("file")}<span>الاتفاق<small>النطاق والتفاصيل</small></span>${icon("check")}</div><div>${icon("grid")}<span>التنفيذ<small>مراحل واضحة ومراجعات</small></span>${icon("clock")}</div><div>${icon("message")}<span>التواصل<small>الملفات والملاحظات</small></span>${icon("arrow")}</div></div><div class="preview-bottom"><span class="mini-avatars"><i>إ</i><i>أنت</i></span><span>أنت وفريق إنطلاقة، في مساحة واحدة.</span></div></div></section><section class="section process-section"><div class="section-head"><div><div class="eyebrow">من أين نبدأ؟</div><h2>رحلة مدروسة، خطوة بخطوة.</h2></div><p>نعرف أن البداية تحمل الكثير من الأسئلة.<br>لهذا، نجعل الطريق واضحًا أمامك.</p></div>${processSteps()}</section><section class="assistant-callout"><div class="assistant-orb" aria-hidden="true">${icon("spark")}</div><div><div class="eyebrow">مساعد انطلاقة</div><h2>فكرتك في بالك، ولا تعرف من أين تبدأ؟</h2><p>اكتشف الحلول، ورتّب متطلبات مشروعك، واسأل عن خطوتك القادمة.</p></div><button class="btn secondary" type="button" data-assistant-open>ابدأ المحادثة ${icon("message")}</button></section><section class="banner"><span class="banner-lines" aria-hidden="true"></span><div><div class="eyebrow">فصلك القادم يبدأ هنا</div><h2>لنصنع شيئًا يليق بطموحك.</h2><p>شاركنا فكرتك. والبداية، علينا معًا.</p></div>${link("/start", "ابدأ مع إنطلاقة " + icon("arrow"), "lime")}</section></div>`;
+    )}</div></div><div class="wrap">${homeCatalogEntry()}${journey()}<section class="section" aria-labelledby="services-title"><div class="section-head"><div><div class="eyebrow">حلول تتكامل حول مشروعك</div><h2 id="services-title">ما تحتاجه للخطوة القادمة.</h2></div><div><p>من بناء الأساس إلى صناعة الأثر.<br>اختر بداية تناسبك، ودع الباقي علينا.</p></div></div><div class="service-grid">${serviceCards({ compact: true })}</div><div class="section-more">${link("/services", "اكتشف جميع خدماتنا " + icon("arrow"), "secondary")}</div></section><section class="platform-section"><div class="platform-copy"><div class="eyebrow">تفاصيل أكثر. تشتّت أقل.</div><h2>مشروعك واضح.<br>في كل خطوة.</h2><p>مساحة خاصة تجمع الاتفاق، والطلبات، والملفات، والتحديثات. لتبقى على اطلاع، وتتفرّغ لما يهمك.</p><ul class="feature-list"><li>${icon("check")}عرض سعر وعقد تراجعهما قبل التنفيذ</li><li>${icon("check")}مراحل ومرفقات مرتبطة بمشروعك</li><li>${icon("check")}تواصل مع الفريق في مكان واحد</li></ul>${link(state.user ? "/dashboard" : "/start", state.user ? "افتح متابعة مشروعك" : "ابدأ مشروعك دون تسجيل", "secondary")}</div><div class="workspace-preview" aria-label="تصور توضيحي لمساحة متابعة المشروع"><div class="preview-title"><span class="preview-brand">${icon("diamond")} مساحة مشروعك</span><span class="preview-label">تصوّر توضيحي</span></div><div class="preview-project"><span class="preview-project-icon">${icon("bag")}</span><div><small>الفصل القادم لمشروعك</small><h3>متجرك الإلكتروني</h3></div><span class="badge">رحلة متكاملة</span></div><div class="preview-progress"><span></span><span></span><span></span><span></span></div><div class="preview-milestones"><div>${icon("file")}<span>الاتفاق<small>النطاق والتفاصيل</small></span>${icon("check")}</div><div>${icon("grid")}<span>التنفيذ<small>مراحل واضحة ومراجعات</small></span>${icon("clock")}</div><div>${icon("message")}<span>التواصل<small>الملفات والملاحظات</small></span>${icon("arrow")}</div></div><div class="preview-bottom"><span class="mini-avatars"><i>إ</i><i>أنت</i></span><span>أنت وفريق إنطلاقة، في مساحة واحدة.</span></div></div></section><section class="section process-section"><div class="section-head"><div><div class="eyebrow">من أين نبدأ؟</div><h2>رحلة مدروسة، خطوة بخطوة.</h2></div><p>نعرف أن البداية تحمل الكثير من الأسئلة.<br>لهذا، نجعل الطريق واضحًا أمامك.</p></div>${processSteps()}</section><section class="assistant-callout"><div class="assistant-orb" aria-hidden="true">${icon("spark")}</div><div><div class="eyebrow">مساعد انطلاقة</div><h2>فكرتك في بالك، ولا تعرف من أين تبدأ؟</h2><p>اكتشف الحلول، ورتّب متطلبات مشروعك، واسأل عن خطوتك القادمة.</p></div><button class="btn secondary" type="button" data-assistant-open>ابدأ المحادثة ${icon("message")}</button></section><section class="banner"><span class="banner-lines" aria-hidden="true"></span><div><div class="eyebrow">فصلك القادم يبدأ هنا</div><h2>لنصنع شيئًا يليق بطموحك.</h2><p>شاركنا فكرتك. والبداية، علينا معًا.</p></div>${link("/start", "ابدأ مع إنطلاقة " + icon("arrow"), "lime")}</section></div>`;
 }
 
 function pageHead(title, subtitle = "", action = "") {
@@ -792,11 +798,47 @@ async function orderDetail(path, oid) {
       .join("")}</ul></section></aside></div>`,
   );
 }
-async function store() {
-  const products = await api("/api/products");
-  return `<div class="wrap"><section class="store-intro"><div><div class="eyebrow">متجر إنطلاقة</div><h1>اختيارات تصنع<br><em>بدايتك القادمة.</em></h1><p>حلول رقمية وموارد عملية، يجمعها هدف واحد: أن تمنح مشروعك ما يحتاجه لينمو.</p><a class="text-link" href="#/start">تحتاج حلًا مخصصًا؟ لنتحدث ${icon("arrow")}</a></div><div class="store-feature"><img src="/assets/catalog-content.webp" alt="تصور إبداعي لموارد رقمية بهوية إنطلاقة" width="1024" height="1024"><span>صُمّم لفكرتك. اختير لخطوتك.</span></div></section>${launchBanner()}<section class="panel study-store-callout"><span class="eyebrow">منتج حسب احتياجك</span><h2>دراسة جدوى لمشروعك تبدأ بالسؤال الصحيح.</h2><p>مختصرة أو تفصيلية، للاستخدام الشخصي أو التمويل؛ تبدأ من ٢٩٩ ريال.</p>${link("/start?service=feasibility", "حدد دراستك وسعرها")}${link("/service/feasibility", "قارن الباقات", "secondary")}</section><section class="panel ready-site-callout"><span class="eyebrow">منتج جديد</span><h2>مواقع جاهزة تُخصّص لمشروعك.</h2><p>ثلاثة نماذج فعلية؛ مع خيارات الاستضافة والدومين والرفع.</p>${link("/ready-websites", "اختر موقعك الجاهز")}</section><section class="collections-section"><div class="section-head"><div><div class="eyebrow">مسارات تبدأ من احتياجك</div><h2>اكتشف عالم إنطلاقة.</h2></div><span class="small muted">خدمات تُنفّذ حسب طلبك</span></div><div class="collection-grid">${state.config.services.map((s) => `<a class="collection-card" href="#/service/${E(s.id)}"><img src="${(artwork[s.id] || artwork.website).image}" alt="" loading="lazy" width="1024" height="1024"><div><span>${E(s.title)}</span>${icon("arrow")}</div></a>`).join("")}</div></section><section class="section" aria-labelledby="digital-products"><div class="section-head"><div><div class="eyebrow">موارد لمشروعك</div><h2 id="digital-products">المنتجات الرقمية</h2></div>${products.length ? `<label class="catalog-search">${icon("search")}<input type="search" data-product-search placeholder="ابحث عن منتج…" aria-label="البحث في المنتجات الرقمية"></label>` : ""}</div>${products.length ? `<div class="catalog-toolbar"><span>${products.length.toLocaleString("ar-SA")} منتج متاح</span><span>تتابع مشترياتك مباشرة بعد الطلب</span></div><div class="three-col product-grid">${products.map((p) => `<article class="product-card" data-product-text="${E((p.title + " " + p.category + " " + p.description).toLowerCase())}">${productImage(p)}<div class="product-body"><h3>${E(p.title)}</h3><p class="pre">${E(p.description)}</p><div class="product-bottom"><div class="price">${money(p.amount)}</div>${link("/checkout/" + p.id, "التفاصيل " + icon("arrow"), "secondary small")}</div></div></article>`).join("")}</div><div class="empty catalog-no-results" hidden><h3>لم نجد منتجًا بهذا الاسم</h3><p>جرّب كلمة أخرى أو تصفّح جميع المنتجات.</p></div>` : `<div class="catalog-empty"><div class="catalog-empty-visual">${icon("bag")}<span>CURATED FOR YOUR NEXT CHAPTER</span></div><div><span class="eyebrow">شيء يستحق الانتظار</span><h3>نجهّز رفوفنا الرقمية.</h3><p>لم تُنشر منتجات للبيع بعد. وحتى تكتمل المجموعة، يمكنك طلب حل مصمّم خصيصًا لمشروعك.</p>${link("/services", "اكتشف حلولنا " + icon("arrow"), "secondary")}</div></div>`}</section><section class="assistant-callout"><div class="assistant-orb">${icon("spark")}</div><div><h2>تبحث عن الاختيار المناسب؟</h2><p>تحدث مع مساعد انطلاقة عن احتياجك وخطوتك القادمة.</p></div><button class="btn secondary" type="button" data-assistant-open>ساعدني في الاختيار ${icon("arrow")}</button></section></div>`;
+async function store(query = new URLSearchParams()) {
+  const products=await api("/api/products"),items=catalogItems(products);
+  const filters={q:(query.get("q")||"").slice(0,200),kind:["services","templates","products"].includes(query.get("kind")) ? query.get("kind") : "all",category:query.get("category")||"all"};
+  const categories=[...new Set(items.map(x=>x.category))];
+  if(filters.category!=="all" && !categories.includes(filters.category))filters.category="all";
+  const count=items.filter(x=>catalogMatches(x,filters)).length;
+  return `<div class="wrap catalog-page"><section class="catalog-intro"><div><span class="eyebrow">اختيارك، بداية مشروعك</span><h1>كل المنتجات والخدمات.</h1><p>ابحث، قارن، واختر ما يناسبك. من أول فكرة إلى موقع ومتجر ومحتوى ونمو.</p></div><div class="catalog-intro-note">${icon("bag")}<span><strong>${items.length.toLocaleString("ar-SA")} خيار لمشروعك</strong><small>اطلب مباشرة، دون إنشاء حساب.</small></span></div></section><section class="catalog-browser" aria-label="اكتشاف المنتجات والخدمات"><div class="catalog-search-row"><label class="catalog-search">${icon("search")}<span class="sr-only">البحث في كل المنتجات والخدمات</span><input type="search" data-catalog-search maxlength="200" value="${E(filters.q)}" placeholder="ابحث عن موقع، متجر، صناعة محتوى…" aria-label="البحث في كل المنتجات والخدمات"></label><button class="btn secondary small" type="button" data-catalog-reset>عرض الكل</button></div><div class="catalog-filter-row"><div class="catalog-kind-filters" role="group" aria-label="نوع المنتج">${[["all","الكل"],["services","الخدمات"],["templates","المواقع الجاهزة"],["products","المنتجات الرقمية"]].map(([id,title])=>`<button type="button" class="category-tab ${filters.kind===id ? "active" : ""}" data-catalog-kind-filter="${id}" aria-pressed="${filters.kind===id}">${title}</button>`).join("")}</div><label class="catalog-category-label"><span>المجال</span><select data-catalog-category-filter aria-label="تصنيف المنتجات حسب المجال"><option value="all">كل المجالات</option>${categories.map(c=>`<option value="${E(c)}" ${filters.category===c ? "selected" : ""}>${E(c)}</option>`).join("")}</select></label></div><div class="catalog-results-top"><p id="catalog-result-count" role="status" aria-live="polite">${count.toLocaleString("ar-SA")} خيار يناسب بحثك</p><span>السعر والتفاصيل قبل تأكيد الطلب</span></div><div class="catalog-grid">${items.map(item=>catalogCard(item,filters)).join("")}</div><section class="catalog-empty-results panel" id="catalog-empty-results" ${count ? "hidden" : ""}><span class="service-icon">${icon("search")}</span><h2>${filters.kind==="products" && !products.length ? "المنتجات الرقمية غير متاحة حاليًا" : "لم نجد ما يطابق بحثك"}</h2><p>جرّب اسمًا آخر أو مجالًا مختلفًا. جميع خدمات انطلاقة والمواقع الجاهزة متاحة للتصفح والطلب.</p><button class="btn secondary" type="button" data-catalog-reset>تصفح كل المنتجات</button></section></section><section class="catalog-help"><div>${icon("spark")}<h2>نساعدك تختار البداية المناسبة.</h2><p>اشرح فكرتك للمساعد، أو اطلب حلًا حسب احتياجك.</p></div><button class="btn secondary" type="button" data-assistant-open>ساعدني في الاختيار</button>${link("/start","طلب مخصص "+icon("arrow"))}</section>${launchBanner()}</div>`;
 }
 
+function normalizeCatalog(value) {
+  return String(value || "").normalize("NFKC").replace(/[\u0610-\u061a\u064b-\u065f\u0670\u0640]/g,"").replace(/[أإآٱ]/g,"ا").replace(/ى/g,"ي").replace(/ة/g,"ه").toLowerCase().trim();
+}
+function catalogMatches(item,{q="",kind="all",category="all"}={}) {
+  return (kind==="all" || item.kind===kind) && (category==="all" || item.category===category) && normalizeCatalog(q).split(/\s+/).every(word=>normalizeCatalog(item.text).includes(word));
+}
+function catalogItems(products=[]) {
+  const services=state.config.services;
+  const items=services.map(s=>({id:s.id,kind:"services",kindTitle:"خدمة حسب طلبك",category:s.category,title:s.title,description:s.description,text:[s.title,s.description,s.category,...(s.includes||[])].join(" "),amount:s.pricing?.from,unit:s.pricing?.unit,from:true,image:(artwork[s.id]||artwork.website).image,detail:"#/service/"+s.id,order:"#/start?service="+s.id}));
+  const ready=services.find(s=>s.id==="ready-website");
+  for(const t of ready?.templates || []) items.push({id:"template-"+t.id,kind:"templates",kindTitle:"موقع جاهز",category:"مواقع جاهزة",title:t.title,description:t.description,text:["موقع جاهز قالب نموذج",t.title,t.description].join(" "),amount:ready.pricing?.from,unit:"للموقع",from:true,image:artwork[({business:"website",portfolio:"content",restaurant:"store"})[t.id]]?.image || artwork.website.image,detail:t.preview,preview:true,order:"#/start?service=ready-website&template="+encodeURIComponent(t.id)});
+  for(const p of products) items.push({id:p.id,kind:"products",kindTitle:"منتج رقمي",category:p.category||"موارد رقمية",title:p.title,description:p.description,text:[p.title,p.description,p.category].join(" "),amount:p.amount,unit:"للمنتج",from:false,image:(artwork[coverKey(p)]||artwork.content).image,detail:"#/checkout/"+encodeURIComponent(p.id),order:"#/checkout/"+encodeURIComponent(p.id)});
+  return items;
+}
+function catalogCard(item,filters) {
+  return `<article class="catalog-item" data-catalog-item data-catalog-kind="${E(item.kind)}" data-catalog-category="${E(item.category)}" data-catalog-text="${E(item.text)}" ${catalogMatches(item,filters) ? "" : "hidden"}><a class="catalog-item-art" href="${E(item.preview ? item.order : item.detail)}" aria-label="عرض ${E(item.title)}"><img src="${E(item.image)}" alt="" loading="lazy" width="1024" height="1024"></a><div class="catalog-item-copy"><div class="catalog-item-meta"><span>${E(item.kindTitle)}</span><span>${E(item.category)}</span></div><h2><a href="${E(item.preview ? item.order : item.detail)}">${E(item.title)}</a></h2><p>${E(item.description)}</p><div class="catalog-item-price"><span>${item.from ? "تبدأ من" : "السعر"}</span><strong>${money(item.amount || 0)}</strong><small>${E(item.unit)}</small></div><div class="catalog-item-actions"><a class="btn small" href="${E(item.order)}">${item.preview ? "خصّص هذا النموذج" : item.kind==="products" ? "تفاصيل المنتج" : "اطلب الخدمة"} ${icon("arrow")}</a>${item.kind!=="products" ? `<a class="text-link" href="${E(item.detail)}" ${item.preview ? 'target="_blank" rel="noopener noreferrer"' : ""}>${item.preview ? "معاينة" : "التفاصيل"}</a>` : ""}</div></div></article>`;
+}
+function homeCatalogEntry() {
+  return `<section class="home-catalog-entry" aria-labelledby="home-catalog-title"><div><span class="eyebrow">كل حلول انطلاقة، في مكان واحد</span><h2 id="home-catalog-title">ما الذي تحتاجه لمشروعك؟</h2><p>ابحث باسم المنتج أو الخدمة، واختر البداية المناسبة.</p></div><form data-form="catalog-search"><label class="sr-only" for="home-catalog-query">ابحث في كل المنتجات والخدمات</label><input id="home-catalog-query" type="search" name="query" maxlength="200" placeholder="موقع، متجر، صور وفيديو، دراسة جدوى…"><button class="btn" type="submit">بحث ${icon("search")}</button></form><div class="catalog-quick-links">${[["/store","كل المنتجات"],["/store?kind=templates","مواقع جاهزة"],["/service/content-production","صور وفيديو"],["/service/feasibility","دراسة جدوى"]].map(([href,label])=>`<a href="#${href}">${E(label)} ${icon("arrow")}</a>`).join("")}</div></section>`;
+}
+function filterCatalog() {
+  const value=selector=>document.querySelector(selector)?.value || "";
+  const filters={q:value("[data-catalog-search]"),kind:document.querySelector("[data-catalog-kind-filter].active")?.dataset.catalogKindFilter||"all",category:value("[data-catalog-category-filter]")||"all"};
+  let count=0;
+  document.querySelectorAll("[data-catalog-item]").forEach(card=>{
+    card.hidden=!catalogMatches({kind:card.dataset.catalogKind,category:card.dataset.catalogCategory,text:card.dataset.catalogText},filters);
+    if(!card.hidden)count++;
+  });
+  const summary=document.querySelector("#catalog-result-count");
+  if(summary) summary.textContent=count ? `${count.toLocaleString("ar-SA")} خيار يناسب بحثك` : "لا توجد نتائج لهذا الاختيار";
+  const empty=document.querySelector("#catalog-empty-results");if(empty)empty.hidden=count>0;
+}
 async function checkout(pid) {
   const products = await api("/api/products"),
     p = products.find((p) => p.id === pid);
@@ -891,6 +933,10 @@ async function notifications(path) {
           )
     }`,
   );
+}
+function supportLanding() {
+  const phone=state.config?.businessPhone || "+966553575760",email=state.config?.businessEmail || "antlaqh2030@gmail.com";
+  return `<div class="wrap section">${pageHead("الدعم والمساعدة","تواصل معنا، أو احصل على إجابة قبل أن تبدأ طلبك.")}<section class="panel"><h2>كيف يمكننا مساعدتك؟</h2><p>استفسر عن الخدمة المناسبة ونطاقها، أو تابع مشروعك عبر رابط المتابعة الخاص الذي ظهر لك بعد إرسال الطلب.</p><div class="actions">${whatsappLink()}<a class="btn secondary" href="mailto:${E(email)}">${icon("message")} البريد الإلكتروني</a><a class="btn secondary" href="tel:${E(phone)}">${icon("user")} اتصل بنا</a></div></section><section class="panel support-faq"><h2>إجابات تساعدك تبدأ</h2><details><summary>أين أجد جميع المنتجات والخدمات؟</summary><p>في الكتالوج الموحد؛ ابحث باسم الخدمة أو استخدم تصنيف المجال ونوع المنتج.</p>${link("/store","كل المنتجات والخدمات","secondary small")}</details><details><summary>هل أحتاج إنشاء حساب للطلب؟</summary><p>لا. تختار الخدمة وتدخل بيانات التواصل، ثم تراجع الإضافات والعقد والسعر قبل الدفع. تحفظ رابط متابعة طلبك للوصول إليه لاحقًا.</p></details><details><summary>كيف أختار بين الباقات؟</summary><p>راجع نطاق الخدمة والسعر المنشور، أو أخبر مساعد انطلاقة بفكرتك. التفاصيل الخاصة والمخرجات وموعد التسليم تثبت في العقد.</p><button class="btn secondary small" type="button" data-assistant-open>اسأل المساعد</button></details></section><div class="actions">${link("/store","استعرض المنتجات","secondary")}${link("/start","ابدأ طلبك "+icon("arrow"))}</div></div>`;
 }
 async function support(path) {
   const tickets = await api("/api/tickets");
@@ -1006,12 +1052,13 @@ async function render() {
         "/profile",
       ].includes(path) || /^\/(order|contract|invoice|addons|payment|study-files|admin)(\/|$)/.test(path);
     let html;
-    if (privateRoute && !state.user && !path.startsWith("/track/")) html = authRequired(raw, path.startsWith("/admin"));
+    if(path === "/support" && !state.user)html=supportLanding();
+    else if (privateRoute && !state.user && !path.startsWith("/track/")) html = authRequired(raw, path.startsWith("/admin"));
     else if (path.startsWith("/admin") && state.user?.role !== "admin")
       throw Error("هذه المساحة متاحة لإدارة المنصة فقط.");
     else if (path === "/") html = home();
     else if (path === "/services")
-      html = `<div class="wrap"><section class="solutions-intro"><div class="eyebrow">من فكرة أولى إلى تجربة متكاملة</div><h1>خبرات تتكامل.<br><em>لأجل طموحك.</em></h1><p>حلول مصمّمة حول ما يحتاجه مشروعك،<br>في كل مرحلة من رحلته الرقمية.</p></section>${launchBanner()}${journey()}<section class="section solutions-catalog">${catalogControls()}<div class="service-grid" id="service-results">${serviceCards()}</div></section><section class="banner"><div><h2>لنحدد نقطة البداية معًا.</h2><p>صف فكرتك لمساعد انطلاقة، أو ابدأ طلب مشروعك مباشرة.</p></div><button class="btn lime" type="button" data-assistant-open>تحدث مع المساعد ${icon("spark")}</button></section></div>`;
+      html = `<div class="wrap"><section class="solutions-intro"><div class="eyebrow">من فكرة أولى إلى تجربة متكاملة</div><h1>خبرات تتكامل.<br><em>لأجل طموحك.</em></h1><p>حلول مصمّمة حول ما يحتاجه مشروعك،<br>في كل مرحلة من رحلته الرقمية.</p></section><section class="section solutions-catalog">${catalogControls()}<div class="service-grid" id="service-results">${serviceCards()}</div></section>${journey()}${launchBanner()}<section class="banner"><div><h2>لنحدد نقطة البداية معًا.</h2><p>صف فكرتك لمساعد انطلاقة، أو ابدأ طلب مشروعك مباشرة.</p></div><button class="btn lime" type="button" data-assistant-open>تحدث مع المساعد ${icon("spark")}</button></section></div>`;
     else if (path === "/ready-websites") html = readyWebsites();
     else if (path === "/launch-offer") html = offerPage();
     else if (path.startsWith("/service/"))
@@ -1044,7 +1091,7 @@ async function render() {
       html = await orderList(path);
     else if (path.startsWith("/order/"))
       html = await orderDetail(path, path.split("/")[2]);
-    else if (path === "/store") html = await store();
+    else if (path === "/store") html = await store(query);
     else if (path.startsWith("/checkout/"))
       html = await checkout(path.split("/")[2]);
     else if (path.startsWith("/addons/"))
@@ -1105,6 +1152,7 @@ document.addEventListener("submit", async (event) => {
     kind = form.dataset.form,
     oid = form.dataset.id;
   try {
+    if (kind === "catalog-search") { go("/store?q="+encodeURIComponent(String(b.query||"").trim().slice(0,200))); return; }
     if (kind === "recovery-request") {
       const channel = form.dataset.channel;
       const available = channel === "email"
@@ -1385,6 +1433,7 @@ function closeMenu(restoreFocus = false) {
   nav.classList.remove("open");
   const button = $('[data-action="menu"]');
   button?.setAttribute("aria-expanded", "false");
+  button?.setAttribute("aria-label", "فتح القائمة");
   if (restoreFocus) button?.focus();
 }
 document.addEventListener("keydown", (event) => {
@@ -1405,6 +1454,8 @@ document.addEventListener("click", async (event) => {
     } else if (action === "menu") {
       const open = $("#main-nav").classList.toggle("open");
       el.setAttribute("aria-expanded", String(open));
+      el.setAttribute("aria-label", open ? "إغلاق القائمة" : "فتح القائمة");
+      if(open)$("#main-nav").querySelector("a")?.focus();
     } else if (action === "logout") {
       await api("/api/auth/logout", { method: "POST", body: {} });
       clearSession();
@@ -1462,7 +1513,7 @@ function filterServices() {
   let count = 0;
   document.querySelectorAll("[data-service-text]").forEach((card) => {
     card.hidden = !(
-      card.dataset.serviceText.includes(term) &&
+      normalizeCatalog(term).split(/\s+/).every(word=>normalizeCatalog(card.dataset.serviceText).includes(word)) &&
       (category === "الكل" || card.dataset.serviceCategory === category)
     );
     if (!card.hidden) count++;
@@ -1477,6 +1528,23 @@ function filterServices() {
 }
 document.addEventListener("input", (e) => {
   if (e.target.matches("[data-service-search]")) filterServices();
+  if (e.target.matches("[data-catalog-search]")) filterCatalog();
+});
+document.addEventListener("change",e=>{
+  if(e.target.matches?.("[data-catalog-category-filter]"))filterCatalog();
+});
+document.addEventListener("click",e=>{
+  const kind=e.target.closest("[data-catalog-kind-filter]"),reset=e.target.closest("[data-catalog-reset]");
+  if(!kind && !reset)return;
+  document.querySelectorAll("[data-catalog-kind-filter]").forEach(button=>{
+    const active=reset ? button.dataset.catalogKindFilter==="all" : button===kind;
+    button.classList.toggle("active",active);button.setAttribute("aria-pressed",String(active));
+  });
+  if(reset){
+    const search=document.querySelector("[data-catalog-search]"),category=document.querySelector("[data-catalog-category-filter]");
+    if(search){search.value="";search.focus();}if(category)category.value="all";
+  }
+  filterCatalog();
 });
 document.addEventListener("click", (e) => {
   const b = e.target.closest("[data-service-filter]");

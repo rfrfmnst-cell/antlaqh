@@ -31,4 +31,5 @@ data/
 *.log
 uploads/
 coverage/
+ui-review/
 .DS_Store
