@@ -2513,6 +2513,7 @@ img {
 .catalog-search-row { display:flex;gap:12px;align-items:stretch; }
 .catalog-search-row .catalog-search { flex:1;max-width:none;background:white;border:1px solid #cdded2;border-radius:14px;min-height:58px; }
 .catalog-search-row input { width:100%;min-width:0;font-size:1rem; }
+.catalog-search:focus-within { outline:3px solid #286c60;outline-offset:4px; }
 .catalog-search-row .btn { white-space:nowrap; }
 .catalog-filter-row { display:flex;align-items:center;justify-content:space-between;gap:20px;margin-top:18px; }
 .catalog-kind-filters { display:flex;gap:8px;flex-wrap:wrap; }

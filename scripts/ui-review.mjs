@@ -8,14 +8,14 @@ import { services } from "../lib/catalog.js";
 
 const dir=await mkdtemp(join(tmpdir(),"antlaqh-ui-")),origin="http://127.0.0.1:39990",artifacts=resolve("ui-review");
 Object.assign(process.env,{NODE_ENV:"test",PORT:"39990",APP_URL:origin,DATA_DIR:dir,DB_DRIVER:"sqlite",OPENAI_API_KEY:"",TWILIO_ACCOUNT_SID:"",BOOTSTRAP_ADMIN_EMAIL:"",BOOTSTRAP_ADMIN_PASSWORD:"",GA4_MEASUREMENT_ID:""});
-let app,browser;
+let app,browser,page;
 try {
   await mkdir(artifacts,{recursive:true});
   app=await import("../server.js?ui-review");
   if(!app.server.listening)await new Promise(done=>app.server.once("listening",done));
   for(const [pid,title,published] of [["ui-guide","دليل تجهيز المتجر",true],["ui-plan","خطة محتوى تجريبية",true],["ui-private","منتج غير منشور",false]]) await app.db.insert("product",{id:pid,title,description:"منتج اختبار محلي لمراجعة تجربة التصفح",category:"موارد رقمية",amount:12000,cover:"content",published,createdAt:new Date().toISOString()},pid);
   browser=await chromium.launch({headless:true});
-  const context=await browser.newContext(),page=await context.newPage(),errors=[];
+  const context=await browser.newContext(),errors=[];page=await context.newPage();
   page.on("pageerror",e=>errors.push(e.message));
   const routes=["/","/store","/services","/ready-websites","/about","/support","/privacy","/terms","/start","/start?service=content-production","/start?service=feasibility","/start?service=ready-website&template=business",...services.map(s=>"/service/"+s.id)];
   for(const viewport of [{width:1440,height:1000},{width:390,height:844},{width:320,height:740}]) {
@@ -80,6 +80,12 @@ try {
     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),"Admin overflow "+route);
   }
   assert.deepEqual(errors,[]);console.log("CATALOG_FILTERS_MENU_CONTENT_FORM_ADMIN_OK");
+} catch(error) {
+  if(page){
+    await page.screenshot({path:join(artifacts,"failure.png"),fullPage:true}).catch(()=>{});
+    console.error("UI_FAILURE",await page.evaluate(()=>({url:location.href,width:innerWidth,overflow:[...document.querySelectorAll("body *")].map(el=>({tag:el.tagName,className:typeof el.className==="string" ? el.className : "",rect:el.getBoundingClientRect()})).filter(x=>x.rect.width && (x.rect.right>innerWidth+1 || x.rect.left < -1)).slice(-30).map(x=>({tag:x.tag,className:x.className,left:x.rect.left,right:x.rect.right,width:x.rect.width}))})).catch(()=>null));
+  }
+  throw error;
 } finally {
   if(browser)await browser.close();
   if(app){await new Promise(done=>app.server.close(done));await app.db.close();}
