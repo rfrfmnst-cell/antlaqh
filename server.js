@@ -1,6 +1,7 @@
 import http from "node:http";
 import { operationalDashboard } from "./lib/admin-dashboard.js";
 import { validateStudy, validateStudyDocuments, studyDocuments } from "./lib/feasibility.js";
+import { validateContentProduction, contentProductionSummary } from "./lib/content-production.js";
 import { services, coverKeys, customerJourney, productCheckoutAddonIds } from "./lib/catalog.js";
 import { createAssistant } from "./lib/assistant.js";
 import { isIP } from "node:net";
@@ -843,6 +844,10 @@ async function api(req, res, url) {
         o.study = validateStudy(b.study);
         o.advertisedPrice = { ...service.pricing, from: o.study.plan.amount, scope: o.study.plan.includes.join("؛ ") };
       } else if (b.study !== undefined) throw fail(400, "أسئلة الدراسة متاحة لخدمة دراسة الجدوى فقط.");
+      if (service.id === "content-production") {
+        o.contentProduction = validateContentProduction(b.contentProduction);
+        o.advertisedPrice = { ...service.pricing, from:o.contentProduction.quote.amount, scope:contentProductionSummary(o.contentProduction) };
+      } else if (b.contentProduction !== undefined) throw fail(400,"خيارات صناعة المحتوى متاحة لهذه الخدمة فقط.");
       if (service.id === "ready-website") {
         const template = service.templates.find(t => t.id === b.template);
         if (!template) throw fail(400, "اختر نموذج الموقع الجاهز.");
@@ -976,12 +981,19 @@ async function api(req, res, url) {
         : null;
       if (o.study && !o.study.documents) throw fail(409, "أكمل خطوة مستندات دراسة الجدوى قبل العقد.");
       const baseAmount = o.type === "service"
-        ? (o.study?.plan.amount ?? baseService?.pricing?.from)
+        ? (o.contentProduction?.quote.amount ?? o.study?.plan.amount ?? baseService?.pricing?.from)
         : (o.subtotal || o.amount);
       if (!Number.isSafeInteger(baseAmount) || baseAmount < 100)
         throw fail(409, "تعذر تحديد سعر الطلب الأساسي.");
       const subtotal = baseAmount + selectedAddons.reduce((sum, addon) => sum + (addon.pricing?.from || 0), 0);
       const details = checkoutContractDetails(baseService, selectedAddons);
+      if (o.contentProduction) {
+        details.deliverables = [contentProductionSummary(o.contentProduction), ...selectedAddons.flatMap(a => a.includes || [a.title])].join("\n");
+        details.revisions = o.contentProduction.quote.revisions;
+        details.supportDays = 0;
+        details.exclusions += "\n" + o.contentProduction.notice;
+        details.clientRequirements = "تقديم الشعار والألوان والمحتوى والمراجع، ومواد الفيديو الأصلية عند اختيار المونتاج، مع تأكيد حقوق استخدامها واعتماد الفكرة والنص قبل التنفيذ. تستكمل المواد مع الفريق قبل بدء التنفيذ.";
+      }
       if (o.study) {
         details.deliverables = [...o.study.plan.includes, ...selectedAddons.flatMap(a => a.includes || [a.title])].join("\n");
         details.revisions = o.study.plan.revisions;
@@ -996,7 +1008,7 @@ async function api(req, res, url) {
       };
       const agreementLines = [
         o.type === "service"
-          ? (o.study ? `${o.study.plan.title}: ${o.study.plan.includes.join("؛ ")}\n${o.study.notice}` : `${baseService.title}: ${baseService.pricing.scope}`)
+          ? (o.contentProduction ? `${baseService.title}: ${contentProductionSummary(o.contentProduction)}` : o.study ? `${o.study.plan.title}: ${o.study.plan.includes.join("؛ ")}\n${o.study.notice}` : `${baseService.title}: ${baseService.pricing.scope}`)
           : `المنتج الرقمي: ${o.title} — ${o.description}`,
         ...selectedAddons.map((addon) => `${addon.title}: ${addon.pricing.scope}`),
       ];
@@ -1005,7 +1017,7 @@ async function api(req, res, url) {
         version: o.contracts.length + 1,
         agreement: agreementLines.join("\n\n"),
         subtotal,
-        deliveryDate: !o.study && o.targetDate && /^\d{4}-\d{2}-\d{2}$/.test(o.targetDate) ? o.targetDate : null,
+        deliveryDate: !o.study && !o.contentProduction && o.targetDate && /^\d{4}-\d{2}-\d{2}$/.test(o.targetDate) ? o.targetDate : null,
         terms: "أقر العميل بأنه راجع وصف الطلب والخدمات الإضافية والسعر والشروط والأحكام، وأن التنفيذ يبدأ بعد تأكيد استلام الدفع واستكمال متطلبات البدء.",
         parties: {
           provider: details.provider.legalName,
@@ -1024,6 +1036,7 @@ async function api(req, res, url) {
         customer: o.customer,
         siteOptions: o.siteOptions,
         studyDetails: o.study,
+        contentDetails: o.contentProduction,
         serviceDetails: o.study ? { ...baseService, includes:o.study.plan.includes, pricing:{...baseService.pricing,from:o.study.plan.amount,scope:o.study.plan.includes.join("؛ ")} } : baseService,
         selectedAddons,
         requestDetails: {
@@ -1111,6 +1124,7 @@ async function api(req, res, url) {
           customer: x.customer,
           siteOptions: x.siteOptions,
           studyDetails: x.study,
+          contentDetails: x.contentProduction,
           serviceDetails: x.study ? { ...services.find(service => service.id === x.service), includes:x.study.plan.includes, pricing:{ ...x.advertisedPrice } } : services.find((service) => service.id === x.service) || null,
           requestDetails: { title: x.title, description: x.description, budget: x.budget || "", targetDate: x.targetDate || "" },
         });

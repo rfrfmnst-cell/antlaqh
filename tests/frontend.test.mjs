@@ -65,6 +65,34 @@ test("study input changes update the package price and enable financing requirem
   await ui.event('change',{target:{name:'service',closest:()=>form}});
   assert.equal(options.hidden,true);assert.equal(options.disabled,true);
 });
+test("content intake displays all published rates and disables irrelevant questions when choices change",async()=>{
+  const ui=await app({hash:"#/start?service=content-production",settings:{...config,services,customerJourney}});
+  const html=ui.nodes.get("#main").innerHTML;
+  for(const name of ["type","imageCount","imageFormat","videoCount","videoMode","duration","videoFormat","voice","brand","platform","language","audience","goal","style","references","sourceUrl"]) assert.ok(html.includes(`name="content_${name}"`));
+  assert.match(html,/id="content-video-options" hidden disabled/);
+  const detail=ui.serviceDetail("content-production");
+  for(const amount of [5900,14900,24900,29900,49900,4900,7900]) assert.ok(detail.includes(new Intl.NumberFormat("ar-SA",{style:"currency",currency:"SAR",maximumFractionDigits:2}).format(amount/100)));
+  const options={},images={},videos={},preview={}, selectors={"#content-options":options,"#content-image-options":images,"#content-video-options":videos,"#content-price-preview":preview};
+  const values={service:"content-production",content_type:"mixed",content_imageCount:"3",content_videoCount:"2",content_videoMode:"editing",content_duration:"30",content_voice:"ai"};
+  const form={querySelector(selector){return selectors[selector] || (selector.startsWith('[name="') ? {value:values[selector.slice(7,-2)]} : null);}};
+  const change=()=>ui.event("change",{target:{name:"content_type",closest:()=>form}});
+  await change();assert.equal(images.disabled,false);assert.equal(videos.disabled,false);
+  assert.ok(preview.innerHTML.includes(new Intl.NumberFormat("ar-SA",{style:"currency",currency:"SAR",maximumFractionDigits:2}).format(573)));
+  values.content_type="images";await change();assert.equal(videos.disabled,true);assert.equal(videos.hidden,true);
+  values.content_type="videos";await change();assert.equal(images.disabled,true);assert.equal(videos.disabled,false);
+  values.content_videoCount="11";await change();assert.match(preview.textContent,/حدد عددًا صحيحًا/);
+  values.service="website";await change();assert.equal(options.hidden,true);assert.equal(options.disabled,true);
+});
+test("content form submits a structured customer brief and the selected quantities",async()=>{
+  let saved;
+  const ui=await app({session:{user,csrf:"test-csrf"},settings:{...config,services,customerJourney},fetch:async(path,options)=>{
+    if(path==="/api/orders" && options.method==="POST") { saved=JSON.parse(options.body);return response({id:"content-test"},201); }
+  }});
+  const button={textContent:"متابعة",disabled:false},form={dataset:{form:"start"},fields:{service:"content-production",title:"محتوى متجر",description:"صور وفيديوهات لعرض خدمات المتجر",content_type:"mixed",content_imageCount:"3",content_videoCount:"2",content_goal:"تشجيع زيارة المتجر",content_style:"أسلوب رسمي بسيط"},querySelector(selector){return selector==="button[type=submit]" ? button : null;}};
+  await ui.event("submit",{preventDefault(){},target:{closest:()=>form}});
+  assert.equal(saved.contentProduction.type,"mixed");assert.equal(saved.contentProduction.imageCount,"3");assert.equal(saved.contentProduction.videoCount,"2");assert.equal(saved.contentProduction.style,"أسلوب رسمي بسيط");
+  assert.equal(saved.study,undefined);assert.equal(ui.location.hash,"/addons/content-test");
+});
 test("an expired launch offer is no longer advertised but a saved quote shows its original discount", async () => {
   const ui = await app({settings:{...config,services,customerJourney,launchOffer:{code:"ANTLAQH20",ratePercent:20,active:true,startsAt:"2026-01-01T00:00:00Z",endsAt:"2026-02-01T00:00:00Z",terms:[]}}});
   assert.equal(ui.launchBanner(),"");
