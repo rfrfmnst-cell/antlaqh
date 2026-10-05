@@ -2,6 +2,7 @@ import http from "node:http";
 import { operationalDashboard } from "./lib/admin-dashboard.js";
 import { validateStudy, validateStudyDocuments, studyDocuments } from "./lib/feasibility.js";
 import { validateContentProduction, contentProductionSummary } from "./lib/content-production.js";
+import { businessVerification } from "./lib/business-verification.js";
 import { services, coverKeys, customerJourney, productCheckoutAddonIds } from "./lib/catalog.js";
 import { createAssistant } from "./lib/assistant.js";
 import { isIP } from "node:net";
@@ -501,6 +502,7 @@ async function api(req, res, url) {
       assistantMode: assistant.mode,
       businessEmail: process.env.BUSINESS_EMAIL || "antlaqh2030@gmail.com",
       businessPhone: process.env.BUSINESS_PHONE || "+966553575760",
+      businessVerification: businessVerification(),
       payments: edfapayCheckout.readiness.configured ? "edfapay_and_bank_transfer" : "bank_transfer",
       paymentMethods: {
         bankTransfer: { available: true },

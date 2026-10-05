@@ -17,6 +17,44 @@ const response = (data, status = 200) => ({
   json: async () => data,
 });
 
+test("unified catalogue exposes all services, three site templates and digital products with prices and direct routes",async()=>{
+  const products=[{id:"guide",title:"دليل متجر",description:"خطوات إعداد متجر جديد",category:"أدلة",amount:12000,cover:"content"}];
+  const ui=await app({hash:"#/store",settings:{...config,services,customerJourney},fetch:async(path)=>path==="/api/products" ? response(products) : undefined});
+  const html=ui.nodes.get("#main").innerHTML;
+  assert.equal((html.match(/data-catalog-item /g)||[]).length,services.length+4);
+  for(const service of services)assert.ok(html.includes(`#/start?service=${service.id}`));
+  assert.match(html,/#\/checkout\/guide/);assert.match(html,/template=business/);assert.match(html,/template=portfolio/);assert.match(html,/template=restaurant/);
+  for(const id of ["all","services","templates","products"])assert.ok(html.includes(`data-catalog-kind-filter="${id}"`));
+  assert.match(ui.nodes.get("#header").innerHTML,/كل المنتجات/);assert.match(ui.nodes.get("#footer").innerHTML,/#\/store\?kind=products/);
+  const items=ui.catalogItems(products);
+  assert.equal(items.filter(x=>ui.catalogMatches(x,{q:"صِنَاعَة المُحْتَوَى"})).length,1);
+  assert.equal(items.filter(x=>ui.catalogMatches(x,{kind:"templates"})).length,3);
+  assert.equal(items.filter(x=>ui.catalogMatches(x,{kind:"products",category:"أدلة"})).length,1);
+  assert.equal(items.filter(x=>ui.catalogMatches(x,{kind:"products",q:"تطبيق"})).length,0);
+  ui.location.hash="#/store?kind=templates&q=مطعم";await ui.render();
+  assert.match(ui.nodes.get("#main").innerHTML,/class="category-tab active" data-catalog-kind-filter="templates"/);
+});
+test("work document appears as activity information without inventing an e-commerce authentication badge",async()=>{
+  const verification={documentNumber:"FL-716389163",verified:false,inquiryUrl:"https://eauthenticate.saudibusiness.gov.sa/inquiry"};
+  const ui=await app({settings:{...config,businessVerification:verification}});
+  assert.match(ui.footer(),/FL-716389163/);assert.match(ui.footer(),/بيانات نشاط انطلاقة/);
+  assert.doesNotMatch(ui.footer(),/موثق في منصة الأعمال/);
+  ui.state.config.businessVerification={...verification,verified:true,certificateNumber:"0000001234",certificateUrl:"https://eauthenticate.saudibusiness.gov.sa/inquiry/details/example"};
+  assert.match(ui.footer(),/موثق في منصة الأعمال/);assert.match(ui.footer(),/عرض شهادة التوثيق/);
+});
+test("guest support is public and never fetches private support tickets",async()=>{
+  const ui=await app({hash:"#/support"});
+  assert.match(ui.nodes.get("#main").innerHTML,/كيف يمكننا مساعدتك/);
+  assert.match(ui.nodes.get("#main").innerHTML,/#\/store/);
+  assert.equal(ui.requests.some(r=>r.path==="/api/tickets"),false);
+});
+test("homepage search leads directly to the unified catalogue without a server mutation",async()=>{
+  const ui=await app(),button={textContent:"بحث",disabled:false};
+  const form={dataset:{form:"catalog-search"},fields:{query:"صور وفيديو"},querySelector:s=>s==="button[type=submit]" ? button : null};
+  await ui.event("submit",{preventDefault(){},target:{closest:()=>form}});
+  assert.equal(ui.location.hash,"/store?q="+encodeURIComponent("صور وفيديو"));
+  assert.equal(ui.requests.some(r=>r.options?.method==="POST"),false);
+});
 test("ready websites preserve template and promotion without customer login", async () => {
   const start = new Date(Date.now()-1000).toISOString(), end = new Date(Date.now()+86400000).toISOString();
   const settings = { ...config,services,customerJourney,launchOffer:{code:"ANTLAQH20",ratePercent:20,active:true,startsAt:start,endsAt:end,terms:[]} };
@@ -158,7 +196,7 @@ async function app({ hash = "#/", session = {}, fetch: request, settings = confi
       throw new Error("Unexpected request: " + path);
     },
   });
-  const runtime = await new vm.Script(`(async () => { ${source}\nreturn { state, render, api, go, header, paymentCard, paymentPage, serviceDetail, priceSummary, launchBanner, readyWebsites, start, whatsappLink, quoteForm, contractCard, contractDocument }; })()`).runInContext(context);
+  const runtime = await new vm.Script(`(async () => { ${source}\nreturn { state, render, api, go, header, footer, catalogItems, catalogMatches, filterCatalog, paymentCard, paymentPage, serviceDetail, priceSummary, launchBanner, readyWebsites, start, whatsappLink, quoteForm, contractCard, contractDocument }; })()`).runInContext(context);
   return {
     ...runtime, nodes, location, requests, document,
     async event(name, event) {

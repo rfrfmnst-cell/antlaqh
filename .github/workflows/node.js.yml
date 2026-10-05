@@ -29,6 +29,17 @@ jobs:
     - run: npm ci
     - run: npm run build
     - run: npm test
+    - name: Install Chromium for UI review
+      run: npx playwright install --with-deps chromium
+    - name: Review desktop and mobile navigation
+      run: npm run test:ui
+    - name: Save UI review screenshots
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ui-review
+        path: ui-review/
+        retention-days: 7
     - name: EdfaPay sandbox smoke test
       env:
         EDFAPAY_SANDBOX_API_KEY: ${{ secrets.EDFAPAY_SANDBOX_API_KEY }}

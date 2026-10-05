@@ -13,6 +13,7 @@ for (const file of [
   "lib/catalog.js",
   "lib/feasibility.js",
   "lib/content-production.js",
+  "lib/business-verification.js",
   "lib/assistant.js",
   "lib/guided-assistant.js",
   "public/assistant.js",
