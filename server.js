@@ -14,6 +14,7 @@ import { createRecovery } from "./lib/recovery.js";
 import { createMetaWebhook } from "./lib/meta-webhook.js";
 import { createEdfapayWebhook, edfapayCallbackPath } from "./lib/edfapay-webhook.js";
 import { createEdfapayCheckout } from "./lib/edfapay-checkout.js";
+import { createSms } from "./lib/sms.js";
 import {
   id,
   digest,
@@ -115,6 +116,31 @@ const smsReady = !!(
   process.env.TWILIO_AUTH_TOKEN &&
   process.env.TWILIO_VERIFY_SERVICE_SID
 );
+const sms = createSms({ normalizePhone });
+const orderStatusLabels = {
+  received: "تم استلام الطلب",
+  reviewing: "طلبك قيد المراجعة",
+  quoted: "عرض السعر والعقد جاهزان للمراجعة",
+  awaiting_payment: "تم اعتماد العقد وبانتظار الدفع",
+  paid: "تم تأكيد الدفع",
+  in_progress: "بدأ تنفيذ طلبك",
+  final_review: "طلبك في المراجعة النهائية",
+  completed: "تم إكمال طلبك",
+  cancelled: "تم إلغاء الطلب",
+};
+function notifyOrderSms(order, message, trackingToken = "") {
+  if (!sms.ready || !order?.customer?.phone) return;
+  const tracking =
+    trackingToken && order?.id
+      ? `\nمتابعة: ${origin}/#/track/${order.id}/${trackingToken}`
+      : "";
+  const body = `انطلاقة للتجارة الإلكترونية\n${message}\nرقم الطلب: ${order.number}${tracking}`;
+  setImmediate(() => {
+    sms.send(order.customer.phone, body).catch((error) => {
+      console.error("SMS notification failed:", error?.status || error?.message || "unknown_error");
+    });
+  });
+}
 const normalizedIp = (value) => String(value).replace(/^::ffff:/, "");
 const trustedProxies = new Set(
   (process.env.TRUSTED_PROXY_IPS || "")
@@ -464,8 +490,12 @@ async function api(req, res, url) {
       integrations: { ga4MeasurementId },
       contracts: contractMetadata,
       recovery: recovery.readiness,
-      channels: { whatsapp: { phone: businessWhatsapp, direct: true, automated: false } },
+      channels: {
+        whatsapp: { phone: businessWhatsapp, direct: true, automated: false },
+        sms: { transactional: sms.ready, provider: sms.provider, mode: sms.mode },
+      },
       smsReady,
+      smsNotificationsReady: sms.ready,
       assistantReady: assistant.ready,
       assistantMode: assistant.mode,
       businessEmail: process.env.BUSINESS_EMAIL || "antlaqh2030@gmail.com",
@@ -832,6 +862,7 @@ async function api(req, res, url) {
     }
     event(o, "تم استلام الطلب", auth.u);
     await db.insert("order", o, auth.u.id);
+    notifyOrderSms(o, "استلمنا طلبك وسنراجع التفاصيل.", trackingToken);
     return json(res, 201, { ...safeOrder(o), trackingToken });
   }
   if (method === "GET" && path === "/api/orders") {
@@ -1100,6 +1131,7 @@ async function api(req, res, url) {
         event(x, `صدر عرض السعر والعقد، الإصدار ${q.version}`, auth.u);
         return x;
       });
+      notifyOrderSms(result, "عرض السعر والعقد جاهزان للمراجعة.");
       return json(res, 200, result);
     }
     if (method === "POST" && action === "accept") {
@@ -1176,6 +1208,7 @@ async function api(req, res, url) {
         event(x, "أكدت الإدارة استلام الدفع", auth.u);
         return x;
       });
+      notifyOrderSms(result, "تم تأكيد استلام الدفع.");
       return json(res, 200, result);
     }
     if (method === "POST" && action === "revoke-payment") {
@@ -1230,6 +1263,7 @@ async function api(req, res, url) {
         event(x, text(b.note || "تم تحديث مرحلة المشروع", 2, 1000), auth.u);
         return x;
       });
+      notifyOrderSms(result, orderStatusLabels[result.status] || "تم تحديث حالة طلبك.");
       return json(res, 200, result);
     }
     throw fail(404, "المسار غير موجود.");
