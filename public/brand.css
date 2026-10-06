@@ -2500,3 +2500,7 @@ img {
 .study-store-callout { background: #edf4ed; margin-block: 24px; }
 .study-store-callout .btn { margin-inline-end: 10px; margin-top: 10px; }
 @media (max-width: 640px) { .study-options { padding: 16px; } .study-options .form-grid { grid-template-columns: 1fr; } }
+
+/* Full approved brand artwork keeps the wordmark readable at every width. */
+.about-logo-stage.brand-artwork { min-height: 0; }
+.about-logo-stage.brand-artwork > img { width: 100%; height: auto; display: block; }
