@@ -25,3 +25,16 @@ const order={id:'a'.repeat(36),number:'INT-TEST',status:'awaiting_payment',amoun
 test('merchant checkout keeps secrets server-side and uses authoritative amount',async()=>{let sent;const c=createEdfapayCheckout({env,request:async(url,options)=>{sent={url,options};return {ok:true,json:async()=>({redirect_url:'https://pay.edfapay.com/checkout/test'})};}});assert.equal(c.readiness.integration,'merchant');assert.doesNotMatch(JSON.stringify(c.readiness),/test-only-password|unrelated-profile-secret/);await c.initiate({order,providerOrderId:'INT-TEST-ABC12345',billing:{firstName:'Test',lastName:'User',address:'Test street',city:'Riyadh',zip:'12345',country:'SA'},payerIp:'127.0.0.1'});assert.equal(sent.url,'https://api.edfapay.com/payment/initiate');assert.equal(sent.options.body.get('order_amount'),'299.00');assert.equal(sent.options.body.get('auth'),'N');assert.equal(sent.options.headers['X-API-KEY'],undefined);assert.doesNotMatch(JSON.stringify([...sent.options.body]),/test-only-password|unrelated-profile-secret/);assert.equal(sent.options.body.get('hash'),'f0331773ae0f1d7b753c29b1d51338d4c9cd51e8');});
 test('merchant checkout rejects missing billing before a network request',async()=>{let calls=0;const c=createEdfapayCheckout({env,request:async()=>{calls++;}});await assert.rejects(c.initiate({order,providerOrderId:'INT-TEST-ABC12345',payerIp:'127.0.0.1'}),{status:400});assert.equal(calls,0);});
 test('merchant checkout refuses disabled credentials and attacker redirect',async()=>{const disabled=createEdfapayCheckout({env:{...env,EDFAPAY_CHECKOUT_ENABLED:'false'}});assert.equal(disabled.readiness.configured,false);const billing={firstName:'Test',lastName:'User',address:'Street',city:'Riyadh',zip:'12345',country:'SA'};const c=createEdfapayCheckout({env,request:async()=>({ok:true,json:async()=>({redirect_url:'https://edfapay.com.attacker.test/pay'})})});await assert.rejects(c.initiate({order,providerOrderId:'INT-TEST-ABC12345',billing,payerIp:'127.0.0.1'}),{status:502});await assert.rejects(c.initiate({order:{...order,payment:{confirmed:true}},providerOrderId:'INT-TEST-ABC12345',billing,payerIp:'127.0.0.1'}),{status:409});});
+
+test('merchant provider prose errors reveal only allowlisted field identifiers',async()=>{
+ const billing={firstName:'Test',lastName:'User',address:'Street',city:'Riyadh',zip:'12345',country:'SA'};
+ for (const [message,field] of [['First Name is mandatory','payer_first_name'],['Merchant Key is invalid','edfa_merchant_id'],['Wrong hash','hash'],['Invalid IP address','payer_ip'],['unknown private value','']]) {
+  const checkout=createEdfapayCheckout({env,request:async()=>({ok:false,status:400,json:async()=>({result:'ERROR',error_code:100000,error_message:'Request data is invalid.',errors:[{error_message:message}]})})});
+  await assert.rejects(checkout.initiate({order,providerOrderId:'INT-TEST-ABC12345',billing,payerIp:'127.0.0.1'}),error=>{
+   assert.doesNotMatch(error.message,/mandatory|invalid|Wrong|private|value/);
+   if(field) assert.ok(error.message.includes(field));
+   else assert.ok(!error.message.includes('الحقول المرفوضة'));
+   return true;
+  });
+ }
+});
