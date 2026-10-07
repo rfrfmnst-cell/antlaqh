@@ -12,6 +12,24 @@ const token = 'test-only-' + 'a'.repeat(40);
 const env = { EDFAPAY_WEBHOOK_ENABLED: 'true', EDFAPAY_CALLBACK_TOKEN: token, APP_URL: 'https://example.test' };
 const payload = { action:'SALE', result:'SUCCESS', status:'SETTLED', order_id:'ANT-TEST-1', trans_id:'test-transaction-1', amount:'299.00', currency:'SAR' };
 const params = () => new URLSearchParams({ token });
+test('merchant callbacks derive a private URL, retain review-only semantics and respect explicit disable',async()=>{
+ const records=[];
+ const db={get:async()=>null,insert:async(_,receipt)=>records.push(receipt),list:async()=>records,remove:async()=>{}};
+ const merchantEnv={APP_URL:'https://example.test',EDFAPAY_MERCHANT_ID:'12345678-1234-1234-1234-123456789012',EDFAPAY_MERCHANT_PASSWORD:'unit-test-password-not-real'};
+ const webhook=createEdfapayWebhook({db,env:merchantEnv});
+ assert.equal(webhook.readiness.authentication,'private_callback_url');
+ assert.equal(webhook.readiness.signed,false);
+ assert.doesNotMatch(JSON.stringify(webhook.readiness)+webhook.callbackUrl,/unit-test-password-not-real/);
+ const callback=new URL(webhook.callbackUrl);
+ assert.match(callback.searchParams.get('token'),/^[A-Za-z0-9_-]{43}$/);
+ assert.equal(createEdfapayWebhook({db,env:merchantEnv}).callbackUrl,webhook.callbackUrl);
+ assert.notEqual(createEdfapayWebhook({db,env:{...merchantEnv,EDFAPAY_MERCHANT_PASSWORD:'rotated-test-password'}}).callbackUrl,webhook.callbackUrl);
+ await assert.rejects(webhook.receive(request(),new URLSearchParams()),{status:403});
+ assert.equal(await webhook.receive(request(),callback.searchParams),'OK');
+ assert.equal(records[0].verified,false); assert.equal(records[0].requiresReview,true);
+ assert.equal(webhook.readiness.autoConfirmation,false);
+ for(const additional of [{EDFAPAY_WEBHOOK_ENABLED:'false'},{EDFAPAY_INTEGRATION:'api_key'}]) assert.equal(createEdfapayWebhook({db,env:{...merchantEnv,...additional}}).readiness.configured,false);
+});
 function setup(clock = () => Date.now()) {
   const records = new Map();
   const db = { get:async(k, key)=>records.get(key), insert:async(k, item)=>records.set(item.id, item),
