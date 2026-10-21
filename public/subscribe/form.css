@@ -1,0 +1,23 @@
+:root{color-scheme:light;font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif}
+*{box-sizing:border-box}
+body{background:linear-gradient(135deg,#e6f6f1,#edf3fb);margin:0;min-height:100vh;padding:28px 14px;color:#193831;line-height:1.7}
+.panel{max-width:660px;background:white;margin:0 auto;padding:clamp(24px,5vw,48px);border:1px solid #dfede7;border-radius:22px;box-shadow:0 16px 48px #0b594218}
+.brand{color:#116e5c;font-size:26px;font-weight:850;text-decoration:none}
+.brand small{color:#5c837a;font-size:14px}
+.tag{color:#167963;font-weight:700;margin-top:18px}
+h1{font-size:clamp(27px,6vw,38px);line-height:1.3;margin:5px 0}
+h2{font-size:22px}
+form{display:flex;flex-direction:column;gap:10px}
+label{font-weight:650;margin-top:7px}
+input:not([type=checkbox]),select{width:100%;padding:12px;font:inherit;border:1px solid #bed5cc;border-radius:11px;background:white;min-height:49px;color:#193831}
+:focus-visible{outline:3px solid #20a789;outline-offset:2px}
+.check{display:flex;gap:12px;align-items:flex-start;font-size:14px;font-weight:500;border:1px solid #e4eee9;padding:12px;border-radius:11px}
+.check input{width:20px;height:20px;accent-color:#137c67;flex-shrink:0}
+button{font:inherit;border:0;border-radius:12px;background:#0f7562;color:white;padding:13px;font-weight:800;cursor:pointer;margin-top:12px}
+button:disabled{opacity:.5;cursor:wait}
+.help,footer{font-size:13px;color:#5f7b72}
+a{color:#087565}
+footer{margin-top:30px;text-align:center}
+#verify-panel{padding-top:20px;margin-top:22px;border-top:1px solid #e4eee9}
+#signup-status,#verify-status{min-height:25px;font-weight:700;color:#155d50}
+.honeypot{position:absolute;left:-99999px;height:1px;width:1px;overflow:hidden}
