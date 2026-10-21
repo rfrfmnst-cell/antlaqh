@@ -1,0 +1,49 @@
+name: Current EdfaPay live diagnostic
+
+on:
+  push:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect public live state
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://antlaqh.com"
+          EXPECTED="$(node -p "require('./package.json').version")"
+          echo "EXPECTED_MAIN_RELEASE=$EXPECTED"
+
+          ccode="$(curl -L -sS -o /tmp/config.json -w "%{http_code}" "$BASE/api/config" || true)"
+          hcode="$(curl -L -sS -o /tmp/health.json -w "%{http_code}" "$BASE/api/health" || true)"
+          echo "CONFIG_HTTP=$ccode"
+          echo "HEALTH_HTTP=$hcode"
+
+          node -e '
+            const fs=require("fs");
+            const safe=(p)=>{try{return JSON.parse(fs.readFileSync(p,"utf8"))}catch{return null}};
+            const c=safe("/tmp/config.json"), h=safe("/tmp/health.json");
+            console.log("LIVE_STATE="+JSON.stringify({
+              release:c?.release ?? null,
+              healthVersion:h?.version ?? null,
+              environment:c?.environment ?? null,
+              payments:c?.payments ?? null,
+              edfapay:c?.paymentMethods?.edfapay ?? null,
+              siteOrigin:c?.siteOrigin ?? null,
+              databaseMode:h?.databaseMode ?? null,
+              databaseFallback:h?.databaseFallback ?? null
+            }));
+          '
+
+          appcode="$(curl -L -sS -o /tmp/app.js -w "%{http_code}" "$BASE/app.js" || true)"
+          echo "APP_JS_HTTP=$appcode"
+          if grep -q 'edfapay-payment' /tmp/app.js 2>/dev/null; then echo "LIVE_FRONTEND_HAS_EDFAPAY=true"; else echo "LIVE_FRONTEND_HAS_EDFAPAY=false"; fi
+
+          hook="$(curl -sS -o /tmp/hook.txt -w "%{http_code}" "$BASE/api/webhooks/edfapay" || true)"
+          echo "WEBHOOK_GET_HTTP=$hook"
+          printf "WEBHOOK_GET_BODY="
+          cat /tmp/hook.txt 2>/dev/null || true
+          echo
