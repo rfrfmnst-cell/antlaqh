@@ -12,6 +12,7 @@ import { createStore } from "./lib/store.js";
 import { getLaunchOffer, claimPromotion, priceBreakdown } from "./lib/promotion.js";
 import { contractMetadata, validateContractDetails, createContractDocument } from "./lib/contracts.js";
 import { createRecovery } from "./lib/recovery.js";
+import { createWhatsappReplies } from "./lib/whatsapp-replies.js";
 import { createMetaWebhook } from "./lib/meta-webhook.js";
 import { createEdfapayWebhook, edfapayCallbackPath } from "./lib/edfapay-webhook.js";
 import { createEdfapayCheckout } from "./lib/edfapay-checkout.js";
@@ -81,7 +82,11 @@ const db = await createStore({
     production && process.env.DB_ALLOW_SQLITE_FALLBACK !== "false",
 });
 const recovery = await createRecovery({ db });
-const metaWebhook = createMetaWebhook({ db });
+const whatsappReplies = createWhatsappReplies({ db, getCatalog: async () => ({
+  services, customerJourney, launchOffer: getLaunchOffer(),
+  contact: { email: process.env.BUSINESS_EMAIL || "antlaqh2030@gmail.com", phone: process.env.BUSINESS_PHONE || "+966553575760" },
+}) });
+const metaWebhook = createMetaWebhook({ db, replies: whatsappReplies });
 const edfapayWebhook = createEdfapayWebhook({ db, origin });
 const edfapayCheckout = createEdfapayCheckout({ origin });
 let businessWhatsapp = "966553575760";
@@ -492,7 +497,7 @@ async function api(req, res, url) {
       contracts: contractMetadata,
       recovery: recovery.readiness,
       channels: {
-        whatsapp: { phone: businessWhatsapp, direct: true, automated: false },
+        whatsapp: { phone: businessWhatsapp, direct: true, automated: metaWebhook.readiness.outbound },
         sms: { transactional: sms.ready, provider: sms.provider, mode: sms.mode },
       },
       smsReady,

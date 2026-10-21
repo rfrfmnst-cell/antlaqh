@@ -22,6 +22,7 @@ for (const file of [
   "lib/contracts.js",
   "lib/recovery.js",
   "lib/meta-webhook.js",
+  "lib/whatsapp-replies.js",
   "lib/edfapay-webhook.js",
   "lib/edfapay-checkout.js",
   "lib/edfapay-api-checkout.js",
