@@ -17,6 +17,8 @@ for (const file of [
   "lib/guided-assistant.js",
   "public/assistant.js",
   "lib/security.js",
+  "lib/individual-optin.js",
+  "public/subscribe/form.js",
   "lib/crypto-work.js",
   "lib/promotion.js",
   "lib/contracts.js",
@@ -35,6 +37,8 @@ for (const file of [
 }
 for (const file of [
   "public/index.html",
+  "public/subscribe/index.html",
+  "public/subscribe/form.css",
   "public/style.css",
   "public/brand.css",
   "public/assistant.css",
