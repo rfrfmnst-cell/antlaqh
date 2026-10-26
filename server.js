@@ -15,6 +15,8 @@ import { createRecovery } from "./lib/recovery.js";
 import { createMetaWebhook } from "./lib/meta-webhook.js";
 import { createEdfapayWebhook, edfapayCallbackPath } from "./lib/edfapay-webhook.js";
 import { createEdfapayCheckout } from "./lib/edfapay-checkout.js";
+import { createTapCheckout, tapWebhookPath } from "./lib/tap-checkout.js";
+import { createTapWebhook } from "./lib/tap-webhook.js";
 import { createSms } from "./lib/sms.js";
 import {
   id,
@@ -84,6 +86,8 @@ const recovery = await createRecovery({ db });
 const metaWebhook = createMetaWebhook({ db });
 const edfapayWebhook = createEdfapayWebhook({ db, origin });
 const edfapayCheckout = createEdfapayCheckout({ origin });
+const tapCheckout = createTapCheckout({ origin });
+const tapWebhook = createTapWebhook({ db });
 let businessWhatsapp = "966553575760";
 try { businessWhatsapp = normalizePhone(process.env.BUSINESS_WHATSAPP_PHONE || "+966553575760").slice(1); } catch {}
 const now = () => new Date().toISOString();
@@ -408,6 +412,27 @@ async function api(req, res, url) {
   const path = url.pathname,
     method = req.method;
   const ip = clientIp(req);
+  if (path === tapWebhookPath) {
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    if (method !== "POST") {
+      res.setHeader("Allow", "POST");
+      res.writeHead(405);
+      return res.end("ERROR");
+    }
+    try {
+      rate(`tap:${ip}`, 120, 60000);
+      rate("tap:total", 600, 60000);
+      const acknowledgement = await tapWebhook.receive(req);
+      res.writeHead(200);
+      return res.end(acknowledgement);
+    } catch (error) {
+      if (!error.status) console.error("Tap receipt failed:", error.code || error.name);
+      if (error.status === 429) res.setHeader("Retry-After", "60");
+      res.writeHead(error.status || 500);
+      return res.end("ERROR");
+    }
+  }
   if (path === edfapayCallbackPath) {
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
@@ -501,9 +526,10 @@ async function api(req, res, url) {
       assistantMode: assistant.mode,
       businessEmail: process.env.BUSINESS_EMAIL || "antlaqh2030@gmail.com",
       businessPhone: process.env.BUSINESS_PHONE || "+966553575760",
-      payments: edfapayCheckout.readiness.configured ? "edfapay_and_bank_transfer" : "bank_transfer",
+      payments: tapCheckout.readiness.configured ? "tap_and_bank_transfer" : edfapayCheckout.readiness.configured ? "edfapay_and_bank_transfer" : "bank_transfer",
       paymentMethods: {
         bankTransfer: { available: true },
+        tap: { available: tapCheckout.readiness.configured, mode: tapCheckout.readiness.mode, reason: tapCheckout.readiness.reason },
         edfapay: {
           available: edfapayCheckout.readiness.configured,
           mode: edfapayCheckout.readiness.mode,
@@ -1175,23 +1201,27 @@ async function api(req, res, url) {
     if (method === "POST" && action === "payment-session") {
       if (auth.u.id !== o.owner)
         throw fail(403, "إنشاء جلسة الدفع متاح لصاحب الطلب فقط.");
-      rate(`edfapay-checkout:${auth.u.id}`, 10, 60000);
+      rate(`online-checkout:${auth.u.id}`, 10, 60000);
       const providerOrderId = `${o.number}-${id().slice(0, 12)}`;
       const checkoutInput = await jsonBody(req);
-      const session = await edfapayCheckout.initiate({ order: o, providerOrderId, billing: checkoutInput.billing, payerIp: ip });
-      await db.insert("edfapayAttempt", {
+      const provider = checkoutInput?.provider === "tap" ? "tap" : "edfapay";
+      const session = provider === "tap"
+        ? await tapCheckout.initiate({ order: o, providerOrderId })
+        : await edfapayCheckout.initiate({ order: o, providerOrderId, billing: checkoutInput.billing, payerIp: ip });
+      await db.insert(provider === "tap" ? "tapAttempt" : "edfapayAttempt", {
         id: digest(providerOrderId),
         providerOrderId,
         orderId: o.id,
         orderNumber: o.number,
         amount: o.amount,
         currency: "SAR",
+        ...(provider === "tap" ? { chargeId: session.chargeId } : {}),
         createdAt: now(),
       }, o.owner);
       await db.update("order", oid, (x) => {
         if (x.status !== "awaiting_payment" || x.amount !== o.amount || x.currentContract !== o.currentContract)
           throw fail(409, "تغيّر الطلب قبل بدء الدفع؛ حدّث الصفحة وحاول مجددًا.");
-        event(x, "تم إنشاء جلسة دفع إلكتروني عبر مبسط", auth.u);
+        event(x, provider === "tap" ? "تم إنشاء جلسة دفع إلكتروني عبر تاب" : "تم إنشاء جلسة دفع إلكتروني عبر مبسط", auth.u);
         return x;
       });
       return json(res, 201, { redirectUrl: session.redirectUrl });
@@ -1301,6 +1331,7 @@ async function api(req, res, url) {
         whatsapp: { ready: recovery.readiness.whatsappReady, direct: true, provider: recovery.readiness.whatsappReady ? "twilio" : null },
         sms: { configured: smsReady },
         meta: metaWebhook.readiness,
+        tap: { ...tapWebhook.readiness, checkout: tapCheckout.readiness, callbackUrl: tapCheckout.readiness.configured ? origin + tapWebhookPath : null },
         edfapay: {
           ...edfapayWebhook.readiness,
           callbackUrl: edfapayWebhook.callbackUrl,

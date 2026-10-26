@@ -94,6 +94,16 @@ TRUSTED_PROXY_IPS=
 
 مراجع Hostinger: [إضافة تطبيق Node.js](https://www.hostinger.com/support/how-to-deploy-a-nodejs-website-in-hostinger/)، [ربط MySQL](https://www.hostinger.com/support/connecting-a-hostinger-mysql-database-to-a-node-js-application/).
 
+## Tap Payments (اختياري — بيئة الاختبار أولًا)
+
+- يتطلب ربط تاب حساب تاجر **خاصًا بانطلاقة** ومفتاح `sk_test_...` ومعرف `TAP_MERCHANT_ID`. لا تستخدم بيانات أي كيان آخر.
+- حفظ الإعدادات عبر متغيرات بيئة الخادم فقط: `TAP_CHECKOUT_ENABLED=true` و`TAP_SECRET_KEY` و`TAP_MERCHANT_ID`. يبقى الافتراضي معطلًا، والمفتاح الحي يحتاج أيضًا `TAP_ALLOW_LIVE=true` بعد تصريح مستقل.
+- عند اكتمال إعداد الخادم سيظهر زر «الدفع عبر تاب» بعد قبول عقد الطلب. ينشئ الخادم Charge بحالة `INITIATED` ويحوّل العميل إلى `checkout.payments.tap.company`، دون نقل أرقام البطاقة إلى انطلاقة.
+- عنوان `POST` للإشعارات: `https://YOUR-DOMAIN/api/webhooks/tap`. يتحقق الخادم من `hashstring` HMAC SHA256 حسب وثائق تاب، ويراجع رقم التاجر ومبلغ الطلب والعملة ومعرّف Charge قبل حفظ سجل التسوية.
+- لا يؤدي رجوع المتصفح من تاب أو مجرد وصول Webhook إلى تأكيد دفع تلقائي. يؤكد المسؤول التسوية يدويًا بعد المطابقة، ولا تتأثر التحويلات البنكية أو مبسط.
+- لإتمام النشر: تثبيت بيانات التاجر في بيئة الاستضافة، اختبار تام في Sandbox بنطاق HTTPS، مراجعة إعدادات تاب وتصاريح الحساب، ثم إجراء تفعيل إنتاجي منفصل.
+- مرجع API: https://developers.tap.company/reference/create-a-charge و https://developers.tap.company/docs/webhook
+
 ## الجوال والدفع والإشعارات
 
 - لتفعيل الجوال، عيّن `TWILIO_ACCOUNT_SID` و`TWILIO_AUTH_TOKEN` و`TWILIO_VERIFY_SERVICE_SID` في البيئة، وفعّل الدول المطلوبة في حساب Twilio. اختبر إرسال رمز حقيقي قبل اعتبار الخدمة مفعلة. يوثق العميل رقمه من إعدادات حسابه أولًا؛ بعدها يستطيع الدخول بالرمز. لا يوجد رمز تجريبي مقبول في التطبيق.
