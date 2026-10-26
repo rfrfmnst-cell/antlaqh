@@ -18,7 +18,9 @@ test("Tap stays disabled without its own merchant credentials",async()=>{
 test("Tap creates a hosted sandbox charge without exposing keys",async()=>{
  let req;
  const service=createTapCheckout({env,origin:"https://antlaqh.com",request:async(url,options)=>{
-   req={url,options};return {ok:true,json:async()=>({id:"chg_TEST0123456789",status:"INITIATED",transaction:{url:"https://checkout.payments.tap.company?token=test"}})};
+   req={url,options};return {ok:true,json:async()=>({id:"chg_TEST0123456789",object:"charge",status:"INITIATED",live_mode:false,
+     amount:299,currency:"SAR",merchant:{id:"123456"},reference:{order:"ANT-TEST-1-ABC123"},
+     transaction:{url:"https://checkout.payments.tap.company?token=test"}})};
  }});
  assert.equal(service.readiness.configured,true);
  assert.equal(service.readiness.mode,"sandbox");
@@ -30,6 +32,7 @@ test("Tap creates a hosted sandbox charge without exposing keys",async()=>{
  assert.equal(data.currency,"SAR");
  assert.equal(data.source.id,"src_all");
  assert.equal(data.merchant.id,"123456");
+ assert.equal(data.reference.idempotent,"ANT-TEST-1-ABC123");
  assert.equal(data.post.url,"https://antlaqh.com/api/webhooks/tap");
  assert.match(data.redirect.url,/provider=tap/);
  assert.equal(data.customer.phone.number,"551234567");
@@ -40,7 +43,9 @@ test("Tap rejects unsafe redirects and unapproved live activation",async()=>{
  const live={...env,TAP_SECRET_KEY:"sk_live_"+"x".repeat(32)};
  assert.equal(createTapCheckout({env:live}).readiness.configured,false);
  const c=createTapCheckout({env,request:async()=>({ok:true,json:async()=>({
-   id:"chg_TEST0123456789",status:"INITIATED",transaction:{url:"https://evil.example"}})})});
+   id:"chg_TEST0123456789",object:"charge",status:"INITIATED",live_mode:false,
+   amount:299,currency:"SAR",merchant:{id:"123456"},reference:{order:"ANT-TEST-1-ABC123"},
+   transaction:{url:"https://evil.example"}})})});
  await assert.rejects(c.initiate({order,providerOrderId:"ANT-TEST-1-ABC123"}),{status:502});
 });
 test("Tap signed webhook is verified and never auto-confirms payment",async()=>{
