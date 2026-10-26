@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>الاشتراك في عروض انطلاقة على واتساب</title>
+  <meta name="description" content="اشترك اختيارياً بعروض انطلاقة عبر واتساب، مع التحقق من رقم الجوال.">
+  <link rel="stylesheet" href="/subscribe/form.css">
+  <script src="/subscribe/form.js" defer></script>
+</head>
+<body>
+<main class="panel">
+  <a class="brand" href="/">انطلاقة <small>antlaqh</small></a>
+  <p class="tag">للمقيمين داخل السعودية</p>
+  <h1>عروض تهمك، باختيارك</h1>
+  <p>اشترك اختياريًا لتصلك عروض الخدمات والمنتجات الرقمية عبر واتساب. لن نرسل عروضًا لمن لم يوافق.</p>
+  <form id="signup">
+    <label for="mobile">رقم جوالك السعودي *</label>
+    <input id="mobile" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="05XXXXXXXX" maxlength="30" required>
+    <label for="city">المدينة *</label>
+    <input id="city" name="city" autocomplete="address-level2" maxlength="80" placeholder="مثال: جدة" required>
+    <label for="name">الاسم (اختياري)</label>
+    <input id="name" name="name" autocomplete="name" maxlength="80" placeholder="اسمك">
+    <label for="interest">العروض التي تهتم بها *</label>
+    <select id="interest" name="interest" required>
+      <option value="">اختر</option>
+      <option value="online-shopping">التسوق الإلكتروني</option>
+      <option value="digital-services">الخدمات الرقمية والذكاء الاصطناعي</option>
+      <option value="offers">العروض والخصومات</option>
+      <option value="other">أخرى</option>
+    </select>
+    <label for="carrier">شركة الاتصالات (اختياري — حسب اختيارك)</label>
+    <select id="carrier" name="carrierClaim">
+      <option value="unknown">لا أرغب بالتحديد</option>
+      <option value="stc">STC</option>
+      <option value="mobily">موبايلي</option>
+      <option value="zain">زين</option>
+      <option value="other">أخرى</option>
+    </select>
+    <div class="honeypot" aria-hidden="true"><label for="website">اترك هذا الحقل فارغًا</label><input id="website" name="website" tabindex="-1" autocomplete="off"></div>
+    <label class="check"><input type="checkbox" id="whatsapp" name="whatsappUser" required> أقرّ بأنني أستخدم واتساب على هذا الرقم.</label>
+    <label class="check"><input type="checkbox" id="consent" name="marketingConsent" required> أوافق باختياري على إرسال عروض ورسائل تسويقية من «انطلاقة» عبر واتساب، ويمكنني سحب الموافقة بالرد «إلغاء» على أي رسالة.</label>
+    <p class="help">نستخدم البيانات لإدارة الاشتراك والعروض. صيغة الرقم الصحيحة لا تثبت ملكيته؛ سنرسل رمز SMS للتحقق. اطلع على <a href="/#/privacy">سياسة الخصوصية</a>.</p>
+    <button type="submit">إرسال رمز التحقق</button>
+    <p id="signup-status" role="status" aria-live="polite"></p>
+  </form>
+  <section id="verify-panel" hidden>
+    <h2>تأكيد ملكية الجوال</h2>
+    <form id="verify-form">
+      <label for="otp">رمز التحقق المرسل عبر SMS</label>
+      <input id="otp" name="code" type="text" inputmode="numeric" pattern="[0-9]{4,10}" autocomplete="one-time-code" required>
+      <button type="submit">تأكيد الاشتراك</button>
+      <p id="verify-status" role="status" aria-live="polite"></p>
+    </form>
+  </section>
+  <footer><a href="/">العودة إلى انطلاقة</a> · <a href="/#/privacy">سياسة الخصوصية</a></footer>
+</main>
+</body>
+</html>

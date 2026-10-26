@@ -18,6 +18,7 @@ import { createEdfapayCheckout } from "./lib/edfapay-checkout.js";
 import { createTapCheckout, tapWebhookPath } from "./lib/tap-checkout.js";
 import { createTapWebhook } from "./lib/tap-webhook.js";
 import { createSms } from "./lib/sms.js";
+import { parseSignup, parseVerification, CONSENT_VERSION } from "./lib/individual-optin.js";
 import {
   id,
   digest,
@@ -122,6 +123,7 @@ const smsReady = !!(
   process.env.TWILIO_VERIFY_SERVICE_SID
 );
 const sms = createSms({ normalizePhone });
+const individualOptinEnabled = process.env.INDIVIDUAL_OPTIN_ENABLED === "true";
 const orderStatusLabels = {
   received: "تم استلام الطلب",
   reviewing: "طلبك قيد المراجعة",
@@ -476,6 +478,8 @@ async function api(req, res, url) {
   const trackingSessionMatch = path.match(/^\/api\/track\/([a-f0-9]{36})\/session$/);
   const publicWrite = [
     "/api/assistant",
+    "/api/individual-optins",
+    "/api/individual-optins/verify",
     "/api/auth/guest",
     "/api/auth/register",
     "/api/auth/login",
@@ -543,6 +547,57 @@ async function api(req, res, url) {
       release: appVersion,
       siteOrigin: origin,
     });
+
+  if (method === "POST" && path === "/api/individual-optins") {
+    if (!individualOptinEnabled || !smsReady)
+      throw fail(503, "الاشتراك غير متاح حتى اكتمال إعداد التحقق من الجوال.");
+    rate(`individual-register-ip:${ip}`, 5, 15 * 60 * 1000);
+    const signup = parseSignup(await jsonBody(req, 6000));
+    const leadId = digest(signup.phone);
+    rate(`individual-register-number:${leadId}`, 3, 60 * 60 * 1000);
+    const existing = await db.get("individualOptin", leadId);
+    if (existing?.status === "verified" && !existing.withdrawnAt)
+      return json(res, 200, { status: "already_subscribed" });
+    // We store no new personal record if the verification provider fails.
+    await twilio("Verifications", { To: signup.phone, Channel: "sms" });
+    const at = now();
+    const record = {
+      id: leadId, phone: signup.phone, name: signup.name,
+      city: signup.city, interest: signup.interest,
+      carrierClaim: signup.carrierClaim, whatsappClaim: true,
+      consent: { version: CONSENT_VERSION, purpose: "antlaqh_whatsapp_marketing",
+        channel: "whatsapp", evidence: "optin_form_checked",
+        acceptedAt: at, verifiedAt: null },
+      status: "pending_phone_verification", withdrawnAt: null,
+      createdAt: existing?.createdAt || at, updatedAt: at,
+      source: "antlaqh_subscribe_form",
+    };
+    if (existing) await db.update("individualOptin", leadId, () => record);
+    else await db.insert("individualOptin", record);
+    return json(res, 202, { status: "verification_required" });
+  }
+  if (method === "POST" && path === "/api/individual-optins/verify") {
+    if (!individualOptinEnabled || !smsReady)
+      throw fail(503, "التحقق من الجوال غير متاح حاليًا.");
+    rate(`individual-verify-ip:${ip}`, 10, 15 * 60 * 1000);
+    const input = parseVerification(await jsonBody(req, 1000));
+    const leadId = digest(input.phone);
+    rate(`individual-verify-number:${leadId}`, 8, 60 * 60 * 1000);
+    const existing = await db.get("individualOptin", leadId);
+    if (!existing || existing.status !== "pending_phone_verification")
+      throw fail(400, "تعذر تأكيد الاشتراك. أعد التسجيل.");
+    const verification = await twilio("VerificationCheck", {
+      To: input.phone, Code: input.code,
+    });
+    if (verification.status !== "approved")
+      throw fail(400, "رمز التحقق غير صحيح أو انتهت صلاحيته.");
+    const at = now();
+    await db.update("individualOptin", leadId, item => ({
+      ...item, status: "verified", updatedAt: at,
+      consent: { ...item.consent, verifiedAt: at },
+    }));
+    return json(res, 200, { status: "verified" });
+  }
   if (method === "POST" && path === "/api/assistant") {
     rate(`assistant:${ip}`, 8, 5 * 60 * 1000);
     rate(`assistant-day:${ip}`, 40, 24 * 60 * 60 * 1000);
