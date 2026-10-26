@@ -48,6 +48,23 @@ test("Tap rejects unsafe redirects and unapproved live activation",async()=>{
    transaction:{url:"https://evil.example"}})})});
  await assert.rejects(c.initiate({order,providerOrderId:"ANT-TEST-1-ABC123"}),{status:502});
 });
+test("Tap refuses a charge for another brand or a mismatched amount",async()=>{
+  for (const overrides of [
+    {merchant:{id:"rafraf-merchant"}},
+    {merchant_id:"rafraf-merchant"},
+    {amount:300},
+    {currency:"KWD"},
+    {live_mode:true},
+    {reference:{order:"ANT-OTHER-123"}},
+  ]) {
+    const payload={id:"chg_TEST0123456789",object:"charge",status:"INITIATED",
+      amount:299,currency:"SAR",live_mode:false,merchant:{id:"123456"},
+      reference:{order:"ANT-TEST-1-ABC123"},
+      transaction:{url:"https://checkout.payments.tap.company?token=test"},...overrides};
+    const checkout=createTapCheckout({env,request:async()=>({ok:true,json:async()=>payload})});
+    await assert.rejects(checkout.initiate({order,providerOrderId:"ANT-TEST-1-ABC123"}),{status:502});
+  }
+});
 test("Tap signed webhook is verified and never auto-confirms payment",async()=>{
  const charge={id:"chg_TEST0123456789",object:"charge",status:"CAPTURED",amount:299,currency:"SAR",
   live_mode:false,merchant:{id:"123456"},reference:{order:"ANT-TEST-1-ABC123",gateway:"gate1",payment:"pay1"},
