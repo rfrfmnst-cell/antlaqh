@@ -9,6 +9,7 @@ for (const file of [
   "server.cjs",
   "server.js",
   "lib/store.js",
+  "lib/file-storage.js",
   "lib/admin-dashboard.js",
   "lib/catalog.js",
   "lib/feasibility.js",
@@ -39,7 +40,7 @@ for (const file of [
   "public/brand.css",
   "public/assistant.css",
   "public/assets/brand-logo-transparent.png",
-  "public/assets/brand-original.jpeg",
+  "public/assets/brand-antlaqh.jpeg",
   ".env.example",
 ])
   if (!existsSync(file)) throw Error(`Missing ${file}`);
