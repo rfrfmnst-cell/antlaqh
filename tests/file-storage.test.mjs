@@ -84,6 +84,30 @@ test("remote errors never silently fall back to a different local file", async (
   }
 });
 
+test("rolling back new writes to local preserves remote file downloads", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "antlaqh-rollback-"));
+  try {
+    const rollbackEnv = { ...env, FILE_STORAGE_DRIVER: "local" };
+    const calls = [];
+    const store = createFileStorage({
+      directory: dir,
+      env: rollbackEnv,
+      request: async (url, options) => {
+        calls.push({ url, options });
+        return { ok: true, arrayBuffer: async () => payload };
+      },
+    });
+    const localFile = await store.save(file, payload);
+    assert.equal(localFile.storage, undefined);
+    assert.deepEqual(await store.read(localFile), payload);
+    assert.deepEqual(await store.read({ ...file, storage: "supabase" }), payload);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].options.method, "GET");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("invalid configuration and file identifiers are rejected", async () => {
   assert.throws(() => createFileStorage({
     directory: "/tmp", env: { FILE_STORAGE_DRIVER: "supabase", SUPABASE_URL: "http://localhost" },
