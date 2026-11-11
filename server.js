@@ -1,4 +1,6 @@
 import http from "node:http";
+import { readSettings, validateSettings, settingFields } from "./lib/platform-settings.js";
+import { readCatalog, saveService } from "./lib/catalog-admin.js";
 import { operationalDashboard } from "./lib/admin-dashboard.js";
 import { validateStudy, validateStudyDocuments, studyDocuments } from "./lib/feasibility.js";
 import { validateContentProduction, contentProductionSummary } from "./lib/content-production.js";
@@ -93,7 +95,7 @@ try { businessWhatsapp = normalizePhone(process.env.BUSINESS_WHATSAPP_PHONE || "
 const now = () => new Date().toISOString();
 const assistant = createAssistant({
   getCatalog: async () => ({
-    services,
+    services: await readCatalog(db),
     customerJourney,
     contact: {
       email: process.env.BUSINESS_EMAIL || "antlaqh2030@gmail.com",
@@ -250,24 +252,24 @@ function safeOrder(o) {
   const { trackingTokenHash, ...safe } = o;
   return safe;
 }
-function checkoutAllowedAddonIds(order) {
+function checkoutAllowedAddonIds(order, services) {
   if (order.type === "product") return productCheckoutAddonIds;
   return services.find((service) => service.id === order.service)?.checkoutAddons?.map((addon) => addon.id) || [];
 }
-function checkoutContractDetails(base, selectedAddons = []) {
-  const providerType = ["none", "commercial_registration", "freelance_certificate"].includes(process.env.BUSINESS_REGISTRATION_TYPE)
-    ? process.env.BUSINESS_REGISTRATION_TYPE : "none";
+function checkoutContractDetails(base, selectedAddons = [], settings = process.env) {
+  const providerType = ["none", "commercial_registration", "freelance_certificate"].includes(settings.BUSINESS_REGISTRATION_TYPE)
+    ? settings.BUSINESS_REGISTRATION_TYPE : "none";
   const deliverables = [
     ...(base?.includes || []),
     ...selectedAddons.flatMap((addon) => addon.includes || [addon.title]),
   ];
   return {
     provider: {
-      legalName: process.env.BUSINESS_LEGAL_NAME || "إنطلاقة للتجارة الإلكترونية",
-      address: process.env.BUSINESS_ADDRESS || "المملكة العربية السعودية",
-      registrationNumber: process.env.BUSINESS_REGISTRATION_NUMBER || "",
+      legalName: settings.BUSINESS_LEGAL_NAME || "إنطلاقة للتجارة الإلكترونية",
+      address: settings.BUSINESS_ADDRESS || "المملكة العربية السعودية",
+      registrationNumber: settings.BUSINESS_REGISTRATION_NUMBER || "",
       registrationType: providerType,
-      activity: process.env.BUSINESS_ACTIVITY || "خدمات التجارة الإلكترونية والحلول الرقمية",
+      activity: settings.BUSINESS_ACTIVITY || "خدمات التجارة الإلكترونية والحلول الرقمية",
     },
     deliverables: deliverables.length ? deliverables.join("\n") : "تسليم المنتج أو الخدمة الموضحة في الطلب وفق الوصف والنطاق المنشور.",
     exclusions: "لا يشمل الاتفاق أعمالًا أو اشتراكات أو رسوم جهات خارجية غير مذكورة صراحة ضمن نطاق الطلب أو الخدمات الإضافية المختارة.",
@@ -373,19 +375,7 @@ if (process.env.BOOTSTRAP_ADMIN_EMAIL && process.env.BOOTSTRAP_ADMIN_PASSWORD) {
     throw Error(
       "Bootstrap email already belongs to a customer. Choose a new admin email.",
     );
-  else if (!(await checkPassword(bootstrapPassword, existingAdmin.password))) {
-    await db.update("user", uid, (u) => ({
-      ...u,
-      password: null,
-      passwordVersion: (u.passwordVersion || 0) + 1,
-      authVersion: (u.authVersion || 0) + 1,
-    }));
-    const passwordHash = await hashPassword(bootstrapPassword);
-    await db.update("user", uid, (u) => ({
-      ...u,
-      password: passwordHash,
-    }));
-  }
+
 }
 
 function isDuplicate(error) {
@@ -411,6 +401,8 @@ async function phoneClaim(number, userId) {
 async function api(req, res, url) {
   const path = url.pathname,
     method = req.method;
+  const services = await readCatalog(db);
+  const settings = await readSettings(db);
   const ip = clientIp(req);
   if (path === tapWebhookPath) {
     res.setHeader("Cache-Control", "no-store");
@@ -524,8 +516,8 @@ async function api(req, res, url) {
       smsNotificationsReady: sms.ready,
       assistantReady: assistant.ready,
       assistantMode: assistant.mode,
-      businessEmail: process.env.BUSINESS_EMAIL || "antlaqh2030@gmail.com",
-      businessPhone: process.env.BUSINESS_PHONE || "+966553575760",
+      businessEmail: settings.BUSINESS_EMAIL || "antlaqh2030@gmail.com",
+      businessPhone: settings.BUSINESS_PHONE || "+966553575760",
       payments: tapCheckout.readiness.configured ? "tap_and_bank_transfer" : edfapayCheckout.readiness.configured ? "edfapay_and_bank_transfer" : "bank_transfer",
       paymentMethods: {
         bankTransfer: { available: true },
@@ -538,7 +530,7 @@ async function api(req, res, url) {
           reason: edfapayCheckout.readiness.reason,
         },
       },
-      bankTransfer: { bank: "البنك الأهلي السعودي", iban: "SA3610000044000001058010", currency: "SAR" },
+      bankTransfer: { bank: settings.BANK_NAME, iban: settings.BANK_IBAN, currency: "SAR" },
       environment: production ? "production" : "development",
       release: appVersion,
       siteOrigin: origin,
@@ -867,11 +859,11 @@ async function api(req, res, url) {
       o.service = service.id;
       o.advertisedPrice = { ...service.pricing };
       if (service.id === "feasibility") {
-        o.study = validateStudy(b.study);
+        o.study = validateStudy(b.study, service.study.plans);
         o.advertisedPrice = { ...service.pricing, from: o.study.plan.amount, scope: o.study.plan.includes.join("؛ ") };
       } else if (b.study !== undefined) throw fail(400, "أسئلة الدراسة متاحة لخدمة دراسة الجدوى فقط.");
       if (service.id === "content-production") {
-        o.contentProduction = validateContentProduction(b.contentProduction);
+        o.contentProduction = validateContentProduction(b.contentProduction, service.contentProduction);
         o.advertisedPrice = { ...service.pricing, from:o.contentProduction.quote.amount, scope:contentProductionSummary(o.contentProduction) };
       } else if (b.contentProduction !== undefined) throw fail(400,"خيارات صناعة المحتوى متاحة لهذه الخدمة فقط.");
       if (service.id === "ready-website") {
@@ -996,7 +988,7 @@ async function api(req, res, url) {
           selectedIds.some((value) => typeof value !== "string") ||
           new Set(selectedIds).size !== selectedIds.length)
         throw fail(400, "اختيارات الخدمات الإضافية غير صحيحة.");
-      const allowed = new Set(checkoutAllowedAddonIds(o));
+      const allowed = new Set(checkoutAllowedAddonIds(o, services));
       if (selectedIds.some((value) => !allowed.has(value)))
         throw fail(400, "إحدى الخدمات الإضافية غير متاحة لهذا الطلب.");
       const selectedAddons = selectedIds
@@ -1012,7 +1004,7 @@ async function api(req, res, url) {
       if (!Number.isSafeInteger(baseAmount) || baseAmount < 100)
         throw fail(409, "تعذر تحديد سعر الطلب الأساسي.");
       const subtotal = baseAmount + selectedAddons.reduce((sum, addon) => sum + (addon.pricing?.from || 0), 0);
-      const details = checkoutContractDetails(baseService, selectedAddons);
+      const details = checkoutContractDetails(baseService, selectedAddons, settings);
       if (o.contentProduction) {
         details.deliverables = [contentProductionSummary(o.contentProduction), ...selectedAddons.flatMap(a => a.includes || [a.title])].join("\n");
         details.revisions = o.contentProduction.quote.revisions;
@@ -1029,8 +1021,8 @@ async function api(req, res, url) {
       }
       const providerDetails = {
         ...details.provider,
-        email: process.env.BUSINESS_EMAIL || "antlaqh2030@gmail.com",
-        phone: process.env.BUSINESS_PHONE || "+966553575760",
+        email: settings.BUSINESS_EMAIL || "antlaqh2030@gmail.com",
+        phone: settings.BUSINESS_PHONE || "+966553575760",
       };
       const agreementLines = [
         o.type === "service"
@@ -1110,8 +1102,8 @@ async function api(req, res, url) {
       const details = validateContractDetails(b.contractDetails);
       const providerDetails = {
         ...details.provider,
-        email: process.env.BUSINESS_EMAIL || "antlaqh2030@gmail.com",
-        phone: process.env.BUSINESS_PHONE || "+966553575760",
+        email: settings.BUSINESS_EMAIL || "antlaqh2030@gmail.com",
+        phone: settings.BUSINESS_PHONE || "+966553575760",
       };
       const q = {
         id: id(),
@@ -1314,14 +1306,38 @@ async function api(req, res, url) {
   }
   if (path.startsWith("/api/admin/")) {
     authorize(auth, true);
+    if (path === "/api/admin/platform-settings") {
+      if (method === "GET") return json(res, 200, { values: settings, labels: Object.fromEntries(Object.entries(settingFields).map(([key, value]) => [key, value[0]])) });
+      if (method === "PUT") {
+        const values = validateSettings(await jsonBody(req));
+        const item = { id: "settings", values, updatedBy: auth.u.id, updatedAt: now() };
+        if (await db.get("platformConfig", "settings")) await db.update("platformConfig", "settings", () => item);
+        else await db.insert("platformConfig", item);
+        return json(res, 200, { saved: true });
+      }
+    }
+    if (path === "/api/admin/services") {
+      if (method === "GET") return json(res, 200, await readCatalog(db, true));
+      if (method === "POST") {
+        const b = await jsonBody(req);
+        const existing = { id: "custom-" + id(), pricing: { currency: "SAR", unit: "للمشروع", note: "السعر للنطاق الموضح؛ أي إضافات بعرض مستقل." } };
+        return json(res, 201, await saveService(db, b, existing, auth.u.id));
+      }
+    }
+    const serviceMatch = path.match(/^\/api\/admin\/services\/([a-z0-9-]+)$/);
+    if (serviceMatch && method === "PUT") {
+      const existing = (await readCatalog(db, true)).find(s => s.id === serviceMatch[1]);
+      if (!existing) throw fail(404, "الخدمة غير موجودة.");
+      return json(res, 200, await saveService(db, await jsonBody(req), existing, auth.u.id));
+    }
     if (method === "GET" && path === "/api/admin/contract-provider")
       return json(res, 200, {
-        legalName: process.env.BUSINESS_LEGAL_NAME || "",
-        address: process.env.BUSINESS_ADDRESS || "",
-        registrationNumber: process.env.BUSINESS_REGISTRATION_NUMBER || "",
-        registrationType: ["none", "commercial_registration", "freelance_certificate"].includes(process.env.BUSINESS_REGISTRATION_TYPE)
-          ? process.env.BUSINESS_REGISTRATION_TYPE : "none",
-        activity: process.env.BUSINESS_ACTIVITY || "",
+        legalName: settings.BUSINESS_LEGAL_NAME || "",
+        address: settings.BUSINESS_ADDRESS || "",
+        registrationNumber: settings.BUSINESS_REGISTRATION_NUMBER || "",
+        registrationType: ["none", "commercial_registration", "freelance_certificate"].includes(settings.BUSINESS_REGISTRATION_TYPE)
+          ? settings.BUSINESS_REGISTRATION_TYPE : "none",
+        activity: settings.BUSINESS_ACTIVITY || "",
       });
     if (method === "GET" && path === "/api/admin/dashboard")
       return json(res, 200, operationalDashboard(await db.list("order")));

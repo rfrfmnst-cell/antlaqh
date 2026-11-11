@@ -10,6 +10,8 @@ for (const file of [
   "server.js",
   "lib/store.js",
   "lib/admin-dashboard.js",
+  "lib/catalog-admin.js",
+  "lib/platform-settings.js",
   "lib/catalog.js",
   "lib/feasibility.js",
   "lib/content-production.js",

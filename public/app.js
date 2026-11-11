@@ -476,6 +476,7 @@ function sidebar(path) {
     ["/admin/contracts", "العقود", "file"],
     ["/admin/payments", "المدفوعات", "file"],
     ["/admin/customers", "العملاء", "user"],
+    ["/admin/services", "الخدمات والأسعار", "grid"],
     ["/admin/products", "المنتجات الرقمية", "file"],
     ["/admin/messages", "رسائل الطلبات", "message"],
     ["/admin/support", "تذاكر الدعم", "message"],
@@ -904,11 +905,44 @@ async function support(path) {
     `${pageHead(admin ? "الدعم والمحادثات" : "الدعم والمساعدة", admin ? "جميع تذاكر العملاء ومحادثات الدعم في مكان واحد." : "محادثة خاصة لمتابعة سؤالك مع الفريق.")}<section class="panel contact-channel"><h2>قناة WhatsApp</h2><p>راسل فريق انطلاقة على الرقم 0553575760. يفتح الزر محادثة مباشرة؛ لا يرسل بيانات حسابك أو طلباتك تلقائيًا. لحفظ الملاحظات ضمن مشروعك، استخدم محادثة الطلب أو تذكرة الدعم.</p>${whatsappLink()}</section><div class="two-col"><section class="panel"><h2>التذاكر</h2>${tickets.length ? tickets.map((t) => `<details class="ticket"><summary><span class="ticket-head"><strong>${E(t.subject)}</strong><span class="badge ${t.status === "closed" ? "completed" : "received"}">${t.status === "closed" ? "مغلقة" : "مفتوحة"}</span></span><span class="small muted">${E(t.name)} · ${date(t.createdAt)}</span></summary><div class="spaced">${t.messages.map((m) => `<div class="message ${m.role === "admin" ? "admin" : ""}"><div class="message-meta"><strong>${E(m.by)}</strong><span>${date(m.at)}</span></div><p class="pre">${E(m.message)}</p></div>`).join("")}<form data-form="ticket-reply" data-id="${t.id}">${errors()}${textarea("message", "إضافة رد", 'required maxlength="5000"')}${state.user.role === "admin" ? `<div class="field"><label for="ticket-status-${t.id}">حالة التذكرة</label><select id="ticket-status-${t.id}" name="status"><option value="open" ${t.status === "open" ? "selected" : ""}>مفتوحة</option><option value="closed" ${t.status === "closed" ? "selected" : ""}>مغلقة</option></select></div>` : ""}<button class="btn" type="submit">إرسال الرد</button></form></div></details>`).join("") : '<p class="muted">لا توجد تذاكر حتى الآن.</p>'}</section>${admin ? "" : `<section class="panel"><h2>تذكرة جديدة</h2><form data-form="ticket">${errors()}${field("subject", "عنوان السؤال", "text", 'required minlength="3" maxlength="180"')}${textarea("message", "كيف يمكننا مساعدتك؟", 'required minlength="10" maxlength="5000"')}<button class="btn" type="submit">إرسال التذكرة</button></form></section>`}</div>`,
   );
 }
+
+function serviceEditor(service = {}) {
+  const pricing = service.pricing || {};
+  const priceInput = (name, label, value) => field(name, label + " (ر.س)", "number", 'required min="1" max="1000000" step="0.01" value="' + E((value || 100) / 100) + '"');
+  let special = "";
+  if (service.study) special += '<h3>أسعار باقات دراسة الجدوى</h3>' + service.study.plans.map(p => priceInput('study_' + p.id, p.title, p.amount)).join('');
+  if (service.contentProduction) {
+    const c = service.contentProduction;
+    special += '<h3>أسعار صناعة المحتوى</h3>' + priceInput('content_imageRate', 'الصورة', c.imageRate);
+    for (const mode of c.videoModes) for (const duration of [30,60]) special += priceInput('content_' + mode.id + duration, mode.title + ' ' + duration + ' ثانية', mode.rates[duration]);
+    for (const duration of [30,60]) special += priceInput('content_voice' + duration, 'تعليق صوتي ' + duration + ' ثانية', c.voiceRates[duration]);
+  }
+  return '<form data-form="service-edit" data-id="' + E(service.id || '') + '">' + errors()
+    + field('title','اسم الخدمة','text','required minlength="3" maxlength="140" value="' + E(service.title || '') + '"')
+    + field('category','التصنيف','text','required minlength="2" maxlength="60" value="' + E(service.category || '') + '"')
+    + '<label class="field">وصف الخدمة<textarea name="description" required minlength="10" maxlength="5000">' + E(service.description || '') + '</textarea></label>'
+    + '<label class="field">ما تشمله الخدمة — كل بند في سطر<textarea name="includes" required minlength="3" maxlength="5000">' + E((service.includes || []).join('\n')) + '</textarea></label>'
+    + priceInput('amount','سعر البداية',pricing.from)
+    + '<label class="field">نطاق السعر<textarea name="scope" required minlength="10" maxlength="5000">' + E(pricing.scope || '') + '</textarea></label>'
+    + special + '<label class="field">حالة الخدمة<select name="enabled"><option value="true"' + (service.enabled !== false ? ' selected' : '') + '>منشورة</option><option value="false"' + (service.enabled === false ? ' selected' : '') + '>مخفية</option></select></label>'
+    + '<button class="btn" type="submit">حفظ الخدمة</button></form>';
+}
+async function adminServices(path) {
+  const services = await api('/api/admin/services');
+  return workspace(path, pageHead('الخدمات والأسعار','إدارة الوصف والنطاق والأسعار وباقات الدراسات والمحتوى. إخفاء الخدمة يوقف الطلبات الجديدة لها؛ الطلبات السابقة محفوظة.')
+    + '<section class="panel"><details><summary>إضافة خدمة جديدة</summary>' + serviceEditor() + '</details></section>'
+    + services.map(s => '<section class="panel"><details><summary>' + E(s.title) + ' · ' + money(s.pricing.from) + ' · ' + (s.enabled === false ? 'مخفية' : 'منشورة') + '</summary>' + serviceEditor(s) + '</details></section>').join(''));
+}
+
 async function adminSettings(path) {
+  const platform = await api("/api/admin/platform-settings");
+  const settingsForm = '<section class="panel"><h2>بيانات المنصة والعقود والتحويل البنكي</h2><form data-form="platform-settings">' + errors() + Object.entries(platform.labels).map(([key,label]) => key === "BUSINESS_REGISTRATION_TYPE"
+    ? '<label class="field">نوع الوثيقة<select name="' + key + '">' + [["none","بدون"],["commercial_registration","سجل تجاري"],["freelance_certificate","وثيقة عمل حر"]].map(([value,title]) => '<option value="' + value + '"' + (platform.values[key] === value ? ' selected' : '') + '>' + title + '</option>').join('') + '</select></label>'
+    : field(key,label,key === "BUSINESS_EMAIL" ? "email" : "text",'maxlength="300" value="' + E(platform.values[key]) + '"')).join('') + '<button class="btn" type="submit">حفظ بيانات المنصة</button></form></section>';
   const provider = await api("/api/admin/contract-provider").catch(() => ({}));
   return workspace(
     path,
-    `${pageHead("إعدادات الإدارة", "بيانات فريق انطلاقة ومعلومات العقود والدفع.")}<div class="two-col"><section class="panel"><h2>حساب الإدارة</h2><div class="key-values"><div><span>الاسم</span><strong>${E(state.user.name)}</strong></div><div><span>البريد</span><strong>${E(state.user.email)}</strong></div><div><span>البيئة</span><strong>${E(state.config?.environment || "—")}</strong></div></div><h3 class="spaced">تغيير كلمة المرور</h3><form data-form="password">${errors()}${field("currentPassword", "كلمة المرور الحالية", "password", 'required autocomplete="current-password" maxlength="128"')}${field("password", "كلمة المرور الجديدة", "password", 'required minlength="12" maxlength="128" autocomplete="new-password"')}<button class="btn" type="submit">حفظ كلمة المرور</button></form></section><section class="panel"><h2>بيانات العقود والدفع</h2><div class="key-values"><div><span>مقدم الخدمة</span><strong>${E(provider.legalName || "غير محدد")}</strong></div><div><span>نوع الوثيقة</span><strong>${E(provider.registrationType || "none")}</strong></div><div><span>رقم الوثيقة</span><strong dir="ltr">${E(provider.registrationNumber || "—")}</strong></div><div><span>النشاط</span><strong>${E(provider.activity || "—")}</strong></div><div><span>البنك</span><strong>${E(state.config?.bankTransfer?.bank || "—")}</strong></div><div><span>الآيبان</span><strong dir="ltr">${E(state.config?.bankTransfer?.iban || "—")}</strong></div></div><p class="small muted spaced">تُدار القيم الحساسة من إعدادات الاستضافة والبيئة، ولا تُعرض مفاتيح الخدمات داخل لوحة التحكم.</p></section></div>`,
+    `${pageHead("إعدادات الإدارة", "بيانات فريق انطلاقة ومعلومات العقود والدفع.")}${settingsForm}<div class="two-col"><section class="panel"><h2>حساب الإدارة</h2><div class="key-values"><div><span>الاسم</span><strong>${E(state.user.name)}</strong></div><div><span>البريد</span><strong>${E(state.user.email)}</strong></div><div><span>البيئة</span><strong>${E(state.config?.environment || "—")}</strong></div></div><h3 class="spaced">تغيير كلمة المرور</h3><form data-form="password">${errors()}${field("currentPassword", "كلمة المرور الحالية", "password", 'required autocomplete="current-password" maxlength="128"')}${field("password", "كلمة المرور الجديدة", "password", 'required minlength="12" maxlength="128" autocomplete="new-password"')}<button class="btn" type="submit">حفظ كلمة المرور</button></form></section><section class="panel"><h2>بيانات العقود والدفع</h2><div class="key-values"><div><span>مقدم الخدمة</span><strong>${E(provider.legalName || "غير محدد")}</strong></div><div><span>نوع الوثيقة</span><strong>${E(provider.registrationType || "none")}</strong></div><div><span>رقم الوثيقة</span><strong dir="ltr">${E(provider.registrationNumber || "—")}</strong></div><div><span>النشاط</span><strong>${E(provider.activity || "—")}</strong></div><div><span>البنك</span><strong>${E(state.config?.bankTransfer?.bank || "—")}</strong></div><div><span>الآيبان</span><strong dir="ltr">${E(state.config?.bankTransfer?.iban || "—")}</strong></div></div><p class="small muted spaced">تُدار القيم الحساسة من إعدادات الاستضافة والبيئة، ولا تُعرض مفاتيح الخدمات داخل لوحة التحكم.</p></section></div>`,
   );
 }
 
@@ -1064,6 +1098,7 @@ async function render() {
     else if (path === "/support" || path === "/admin/support") html = await support(path);
     else if (path === "/admin/contracts") html = await adminContracts(path);
     else if (path === "/admin/payments") html = await adminPayments(path);
+    else if (path === "/admin/services") html = await adminServices(path);
     else if (path === "/admin/settings") html = await adminSettings(path);
     else if (path === "/admin/messages") html = await adminMessages(path);
     else if (path === "/admin/channels") html = await adminChannels(path);
@@ -1324,6 +1359,23 @@ document.addEventListener("submit", async (event) => {
       });
       await render();
       notify("تم حفظ رسالتك.");
+    } else if (kind === "platform-settings") {
+      await api("/api/admin/platform-settings", { method: "PUT", body: b });
+      state.config = await api("/api/config");
+      await render();
+      notify("تم حفظ بيانات المنصة.");
+    } else if (kind === "service-edit") {
+      b.amount = Math.round(Number(b.amount) * 100);
+      b.enabled = b.enabled === "true";
+      b.studyPrices = {}; b.contentPrices = {};
+      for (const [key,value] of Object.entries(b)) {
+        if (key.startsWith("study_")) b.studyPrices[key.slice(6)] = Math.round(Number(value) * 100);
+        if (key.startsWith("content_")) b.contentPrices[key.slice(8)] = Math.round(Number(value) * 100);
+      }
+      await api("/api/admin/services" + (oid ? "/" + oid : ""), { method: oid ? "PUT" : "POST", body: b });
+      state.config = await api("/api/config");
+      await render();
+      notify("تم حفظ الخدمة وأسعارها.");
     } else if (kind === "password") {
       const result = await api("/api/auth/password", {
         method: "POST",
