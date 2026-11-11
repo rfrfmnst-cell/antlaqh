@@ -5,7 +5,8 @@ import { validateContentProduction, contentProductionSummary } from "./lib/conte
 import { services, coverKeys, customerJourney, productCheckoutAddonIds } from "./lib/catalog.js";
 import { createAssistant } from "./lib/assistant.js";
 import { isIP } from "node:net";
-import { readFile, writeFile, mkdir, unlink, stat } from "node:fs/promises";
+import { readFile, mkdir } from "node:fs/promises";
+import { createFileStorage } from "./lib/file-storage.js";
 import { resolve, join, extname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createStore } from "./lib/store.js";
@@ -76,6 +77,7 @@ if (
 )
   throw Error("DATA_DIR must be outside the deployed checkout.");
 await mkdir(join(dataDir, "files"), { recursive: true });
+const fileStorage = createFileStorage({ directory: join(dataDir, "files") });
 const db = await createStore({
   driver,
   dir: dataDir,
@@ -298,15 +300,15 @@ async function saveFile(req, studyFile = false) {
     size: buffer.length,
     at: now(),
   };
-  await writeFile(join(dataDir, "files", f.id), buffer, { flag: "wx" });
-  return f;
+  return fileStorage.save(f, buffer);
 }
 async function sendFile(res, f) {
   if (!f || !/^[a-f0-9]{36}$/.test(f.id)) throw fail(404, "الملف غير موجود.");
   let buffer;
   try {
-    buffer = await readFile(join(dataDir, "files", f.id));
-  } catch {
+    buffer = await fileStorage.read(f);
+  } catch (error) {
+    if (error.status === 503) throw error;
     throw fail(404, "الملف غير متاح. تواصل مع الدعم.");
   }
   res.writeHead(200, {
@@ -962,7 +964,7 @@ async function api(req, res, url) {
         });
         return json(res, 201, result);
       } catch (e) {
-        await unlink(join(dataDir, "files", f.id));
+        try { await fileStorage.remove(f); } catch { console.error("File cleanup failed after DB error."); }
         throw e;
       }
     }
@@ -1413,7 +1415,7 @@ async function api(req, res, url) {
           });
           return json(res, 200, safeProduct(p, true));
         } catch (e) {
-          await unlink(join(dataDir, "files", f.id));
+          try { await fileStorage.remove(f); } catch { console.error("File cleanup failed after DB error."); }
           throw e;
         }
       }
