@@ -397,7 +397,7 @@ function readyWebsites() {
 }
 function paymentIcons() {
   const online = state.config?.paymentMethods?.edfapay?.available || state.config?.paymentMethods?.tap?.available;
-  return `<div class="wrap payment-methods" aria-label="وسائل الدفع"><div class="payment-enabled">${icon("globe")}<strong>تحويل بنكي</strong><span>متاح</span></div><div class="${online ? "payment-enabled" : "payment-future"}" aria-label="الدفع الإلكتروني"><span class="pay-brand visa" dir="ltr">VISA</span><span class="pay-brand mastercard" dir="ltr"><i></i><i></i><b>Mastercard</b></span><span class="pay-brand mada">مدى <b dir="ltr">mada</b></span><span class="pay-brand applepay" dir="ltr">Apple Pay</span></div><p>${online ? (state.config?.paymentMethods?.edfapay?.available ? "الدفع الإلكتروني عبر مبسط / EdfaPay متاح إلى جانب التحويل البنكي. ظهور وسيلة بعينها داخل صفحة الدفع يعتمد على إعداد حساب التاجر لدى المزوّد." : "الدفع الإلكتروني عبر تاب (Tap) متاح إلى جانب التحويل البنكي.") : "التحويل البنكي متاح حاليًا. الدفع الإلكتروني يظهر بعد اكتمال إعداد مبسط / EdfaPay واختباره."}</p></div>`;
+  return `<div class="wrap payment-methods" aria-label="وسائل الدفع"><div class="payment-enabled">${icon("globe")}<strong>تحويل بنكي</strong><span>متاح</span></div><div class="${online ? "payment-enabled" : "payment-future"}" aria-label="الدفع الإلكتروني"><span class="pay-brand visa" dir="ltr">VISA</span><span class="pay-brand mastercard" dir="ltr"><i></i><i></i><b>Mastercard</b></span><span class="pay-brand mada">مدى <b dir="ltr">mada</b></span><span class="pay-brand applepay" dir="ltr">Apple Pay</span></div><p>${online ? (state.config?.paymentMethods?.edfapay?.available ? "الدفع الإلكتروني عبر مبسط / EdfaPay متاح إلى جانب التحويل البنكي. ظهور وسيلة بعينها داخل صفحة الدفع يعتمد على إعداد حساب التاجر لدى المزوّد." : "الدفع الإلكتروني عبر تاب (Tap) متاح إلى جانب التحويل البنكي.") : "التحويل البنكي هو وسيلة الدفع الوحيدة المتاحة حاليًا. من المتوقع تفعيل وسائل الدفع الإلكتروني خلال 48 ساعة من إعلان 11 نوفمبر 2026، أي بحلول 13 نوفمبر 2026، بعد اكتمال الربط والاختبار."}</p></div>`;
 }
 function socialIcon(name) {
   const icons = {
@@ -835,7 +835,7 @@ async function paymentPage(oid, query = new URLSearchParams()) {
         ? '<div class="notice warning">لم تكتمل عملية الدفع الإلكتروني. يمكنك المحاولة مرة أخرى أو استخدام التحويل البنكي.</div>'
         : ""
     : "";
-  return `<div class="wrap"><div class="checkout">${pageHead("الدفع", (state.config?.paymentMethods?.edfapay?.available || state.config?.paymentMethods?.tap?.available) ? "اختر الدفع الإلكتروني أو التحويل البنكي بعد موافقتك على العقد." : "بعد الموافقة على العقد أكمل التحويل وأرسل الإيصال للمراجعة.")}${returned}${trackingLink(o.id)}${o.type === "service" ? progress(o) : ""}${paymentCard(o)}<div class="actions spaced">${link("/order/" + o.id, "متابعة الطلب", "secondary")}</div></div></div>`;
+  return `<div class="wrap"><div class="checkout">${pageHead("الدفع", (state.config?.paymentMethods?.edfapay?.available || state.config?.paymentMethods?.tap?.available) ? "اختر الدفع الإلكتروني أو التحويل البنكي بعد موافقتك على العقد." : "التحويل البنكي هو وسيلة الدفع الوحيدة المتاحة حاليًا. يُتوقع تفعيل الدفع الإلكتروني بحلول 13 نوفمبر 2026. بعد الموافقة على العقد أكمل التحويل وأرسل الإيصال للمراجعة.")}${returned}${trackingLink(o.id)}${o.type === "service" ? progress(o) : ""}${paymentCard(o)}<div class="actions spaced">${link("/order/" + o.id, "متابعة الطلب", "secondary")}</div></div></div>`;
 }
 async function contracts(path) {
   const orders = (await api("/api/orders")).filter((o) => o.contracts.length);
