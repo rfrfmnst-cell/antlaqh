@@ -1012,7 +1012,7 @@ async function render() {
     let html;
     if (privateRoute && !state.user && !path.startsWith("/track/")) html = authRequired(raw, path.startsWith("/admin"));
     else if (path.startsWith("/admin") && state.user?.role !== "admin")
-      throw Error("هذه المساحة متاحة لإدارة المنصة فقط.");
+      html = authRequired(raw, true);
     else if (path === "/") html = home();
     else if (path === "/services")
       html = `<div class="wrap"><section class="solutions-intro"><div class="eyebrow">من فكرة أولى إلى تجربة متكاملة</div><h1>خبرات تتكامل.<br><em>لأجل طموحك.</em></h1><p>حلول مصمّمة حول ما يحتاجه مشروعك،<br>في كل مرحلة من رحلته الرقمية.</p></section>${launchBanner()}${journey()}<section class="section solutions-catalog">${catalogControls()}<div class="service-grid" id="service-results">${serviceCards()}</div></section><section class="banner"><div><h2>لنحدد نقطة البداية معًا.</h2><p>صف فكرتك لمساعد انطلاقة، أو ابدأ طلب مشروعك مباشرة.</p></div><button class="btn lime" type="button" data-assistant-open>تحدث مع المساعد ${icon("spark")}</button></section></div>`;
