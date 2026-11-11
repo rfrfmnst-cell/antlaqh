@@ -23,7 +23,7 @@ test("ready websites preserve template and promotion without customer login", as
   const ui = await app({hash:"#/ready-websites",settings});
   assert.match(ui.nodes.get("#main").innerHTML,/\/demos\/business\//);
   assert.match(ui.nodes.get("#main").innerHTML,/template=portfolio&promo=ANTLAQH20/);
-  assert.match(ui.nodes.get("#footer").innerHTML,/التحويل البنكي متاح حاليًا/);
+  assert.match(ui.nodes.get("#footer").innerHTML,/التحويل البنكي هو وسيلة الدفع الوحيدة المتاحة حاليًا/);
   ui.location.hash="#/start?service=ready-website&template=portfolio&promo=ANTLAQH20";
   await ui.render();
   assert.match(ui.nodes.get("#main").innerHTML,/name="customerName"/);
