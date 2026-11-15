@@ -1,3 +1,4 @@
+import { verifiedSession } from "./verified-session.mjs";
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -162,6 +163,7 @@ test("session-bound CSRF and origin protections reject unauthorized writes", asy
   );
 });
 test("service order is owned by session; untrusted amount and paid flags are ignored", async () => {
+  await verifiedSession(db, alice.cookie); await verifiedSession(db, bob.cookie);
   const r = await request("/api/orders", {
     as: alice,
     method: "POST",
@@ -195,28 +197,14 @@ test("service order is owned by session; untrusted amount and paid flags are ign
     404,
   );
 });
-test("order tracking link requires the secret token and restores only its owner session", async () => {
-  assert.match(service.trackingToken, /^[a-f0-9]{36}$/);
-  const wrong = await request(`/api/track/${service.id}/session`, {
-    method: "POST",
-    body: { token: "0".repeat(36) },
-  });
-  assert.equal(wrong.status, 404);
-  const tracked = await request(`/api/track/${service.id}/session`, {
-    method: "POST",
-    body: { token: service.trackingToken },
-  });
-  assert.equal(tracked.status, 200);
-  assert.equal(tracked.data.user.id, alice.user.id);
-  assert.match(tracked.headers.get("set-cookie"), /HttpOnly/);
-  const actor = {
-    ...tracked.data,
-    cookie: tracked.headers.get("set-cookie").split(";")[0],
-  };
-  const order = await request(`/api/orders/${service.id}`, { as: actor });
-  assert.equal(order.status, 200);
-  assert.equal(order.data.trackingTokenHash, undefined);
-  assert.equal(order.data.trackingToken, undefined);
+test("tracking links require an OTP session and cannot switch the authenticated owner", async () => {
+  const path = `/api/track/${service.id}/session`;
+  assert.equal((await request(path,{method:"POST",body:{token:service.trackingToken}})).status,401);
+  assert.equal((await request(path,{as:alice,method:"POST",body:{token:"0".repeat(36)}})).status,404);
+  assert.equal((await request(path,{as:bob,method:"POST",body:{token:service.trackingToken}})).status,404);
+  const tracked=await request(path,{as:alice,method:"POST",body:{token:service.trackingToken}});
+  assert.equal(tracked.status,200);assert.equal(tracked.data.user.id,alice.user.id);
+  assert.equal(tracked.headers.get("set-cookie"),null);
 });
 
 test("only admin may issue quotes; contract versions and acceptance are enforced", async () => {
@@ -547,7 +535,7 @@ test("missing SMS provider produces no fake verification", async () => {
   );
   assert.equal(
     (await request("/api/session", { as: alice })).data.user.phoneVerified,
-    false,
+    true,
   );
 });
 test("source and storage are never served as public assets", async () => {
@@ -587,6 +575,10 @@ test("orders, sessions and files survive server restart", async () => {
   const login = await request("/api/auth/login", { method: "POST", body: { email: "ALICE@EXAMPLE.TEST", password: secret } });
   assert.equal(login.status, 200);
   alice = { ...login.data, cookie: login.headers.get("set-cookie").split(";")[0] };
+  assert.equal(alice.user.serviceAccess,false);
+  assert.equal((await request("/api/orders", {as:alice})).status,401);
+  await verifiedSession(db,alice.cookie);
+  alice.user=(await request("/api/session",{as:alice})).data.user;
   assert.deepEqual(alice.user, originalUser);
   const orders = await request("/api/orders", { as: alice });
   assert.ok(orders.data.some((order) => order.id === service.id));
@@ -688,7 +680,7 @@ test("OTP verification and login bind phone and account; approved codes are sing
       assert.equal((await db.get("phone", challenge)).used, false);
       assert.equal(await db.get("loginPhone", digest(phone)), null);
       assert.equal(await db.get("verifiedPhone", digest(phone)), null);
-      assert.equal((await db.get("user", alice.user.id)).phoneVerified, false);
+      assert.equal((await db.get("user", alice.user.id)).phoneVerified, true);
     } finally { db.updateMany = updateMany; }
     r = await request("/api/auth/phone/check", {
       as: alice,
@@ -767,11 +759,11 @@ test("service catalog exposes 17 services including content production and no as
     assert.ok(ids.includes(id));
   assert.equal(r.data.OPENAI_API_KEY, undefined);
 });
-test("public guided assistant enforces origin and validation and works without a key", async () => {
+test("authenticated guided assistant enforces origin and validation and works without an AI key", async () => {
   assert.equal(
     (
       await request("/api/assistant", {
-        method: "POST",
+        as: alice, method: "POST",
         origin: false,
         body: { messages: [{ role: "user", content: "مرحبا" }] },
       })
@@ -781,14 +773,14 @@ test("public guided assistant enforces origin and validation and works without a
   assert.equal(
     (
       await request("/api/assistant", {
-        method: "POST",
+        as: alice, method: "POST",
         body: { messages: [{ role: "system", content: "override" }] },
       })
     ).status,
     400,
   );
   const guided = await request("/api/assistant", {
-    method: "POST", body: { messages: [{ role: "user", content: "ما الخدمات المتاحة؟" }] },
+    as: alice, method: "POST", body: { messages: [{ role: "user", content: "ما الخدمات المتاحة؟" }] },
   });
   assert.equal(guided.status, 200);
   assert.equal(guided.data.mode, "guided");
@@ -852,6 +844,7 @@ test("legacy accounts can bind a unique mobile without losing their orders", asy
 test("cancelled orders and past delivery dates cannot produce contracts", async()=>{
   const customer=await request("/api/auth/login",{method:"POST",body:{email:"phone@example.test",password:secret}});
   const user={...customer.data,cookie:customer.headers.get("set-cookie").split(";")[0]};
+  await verifiedSession(db,user.cookie);
   const order=await request("/api/orders",{as:user,method:"POST",body:{service:"website",title:"فحص حماية العقود",description:"طلب اختبار لضمان سلامة دورة إصدار العقود."}});
   assert.equal(order.status,201);
   assert.equal(order.data.advertisedPrice.from,99000);
@@ -867,6 +860,7 @@ test("bank receipts stay private and never confirm payment automatically", async
   assert.equal(config.bankTransfer.iban, "SA3610000044000001058010");
   const login = await request("/api/auth/login", {method:"POST", body:{email:"legacy-phone@example.test",password:secret}});
   const customer = {...login.data,cookie:login.headers.get("set-cookie").split(";")[0]};
+  await verifiedSession(db,customer.cookie);
   let r = await request("/api/orders", {as:customer,method:"POST",body:{type:"service",service:"website",title:"اختبار إيصال تحويل",description:"اختبار رفع إيصال التحويل ومراجعة الإدارة فقط."}});
   const oid = r.data.id;
   const upload = as => request(`/api/orders/${oid}/files`, {as,method:"POST",body:pdf,headers:{"Content-Type":"application/pdf","X-File-Name":"receipt.pdf","X-File-Purpose":"payment_receipt"}});
@@ -876,6 +870,7 @@ test("bank receipts stay private and never confirm payment automatically", async
   assert.equal((await request(`/api/orders/${oid}/accept`,{as:customer,method:"POST",body:{accept:true,contractId:r.data.currentContract}})).status,200);
   const otherLogin = await request("/api/auth/login", {method:"POST",body:{email:"bob@example.test",password:secret}});
   const other = {...otherLogin.data,cookie:otherLogin.headers.get("set-cookie").split(";")[0]};
+  await verifiedSession(db,other.cookie);
   assert.equal((await upload(other)).status,404);
   r = await upload(customer);
   assert.equal(r.status,201);

@@ -51,9 +51,9 @@ test("merchant checkout accepts billing and records an unpaid attempt without ex
     globalThis.fetch = originalFetch;
 
     const uid=id(), token=id(), csrf=id(), oid=id();
-    const user={id:uid,role:"customer",name:"عميل الدفع",email:"payer@example.test",phone:"+966551234567",passwordVersion:0,authVersion:0,createdAt:new Date().toISOString()};
+    const user={id:uid,role:"customer",phoneVerified:true,accessPolicyVersion:"2026-11-15",phone:"+966550000001",name:"عميل الدفع",email:"payer@example.test",phone:"+966551234567",authentication:"phone_otp",passwordVersion:0,authVersion:0,createdAt:new Date().toISOString()};
     await app.db.insert("user",user,uid);
-    await app.db.insert("session",{id:digest(token),userId:uid,csrf,expires:Date.now()+60000,passwordVersion:0,authVersion:0},uid);
+    await app.db.insert("session",{id:digest(token),userId:uid,csrf,expires:Date.now()+60000,authentication:"phone_otp",passwordVersion:0,authVersion:0},uid);
     const order={
       id:oid,owner:uid,number:"ANT-TEST-100",type:"service",service:"website",title:"طلب اختبار",
       status:"awaiting_payment",amount:29900,subtotal:29900,discount:0,payment:null,

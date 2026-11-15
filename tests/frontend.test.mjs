@@ -5,10 +5,11 @@ import vm from "node:vm";
 import { services, customerJourney } from "../lib/catalog.js";
 
 const source = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
-const user = { id: "customer", role: "customer", name: "عميل الاختبار" };
+const user = { serviceAccess:true, phoneVerified:true, phone:"+966550000001", id: "customer", role: "customer", name: "عميل الاختبار" };
 const config = {
   services: [{ id: "website", title: "موقع إلكتروني", description: "تصميم موقع", category: "برمجة" }],
   smsReady: false,
+  phoneLogin: {ready:true},
   assistantReady: false,
 };
 const response = (data, status = 200) => ({
@@ -17,7 +18,42 @@ const response = (data, status = 200) => ({
   json: async () => data,
 });
 
-test("ready websites preserve template and promotion without customer login", async () => {
+test("phone login collects name and consent, preserves the requested service, and verifies without passwords", async () => {
+  let sent, checked;
+  const destination = "/start?service=identity";
+  const ui = await app({ hash:"#"+destination, settings:{...config,services}, fetch:async(path,options)=>{
+    if(path==="/api/auth/mobile/send") { sent=JSON.parse(options.body); return response({challengeId:"a".repeat(36),phoneHint:"+966•••••001",message:"أرسلنا الرمز"}); }
+    if(path==="/api/auth/mobile/check") { checked=JSON.parse(options.body); return response({user,csrf:"new-session"}); }
+  }});
+  let html=ui.nodes.get("#main").innerHTML;
+  for(const name of ["name","phone","acceptTerms"]) assert.ok(html.includes(`name="${name}"`));
+  assert.doesNotMatch(html,/name="password"|name="email"/);
+  assert.equal(ui.requests.some(r=>r.path==="/api/orders"),false);
+  async function submit(kind,fields) {
+    const button={disabled:false,textContent:"إرسال"},error={textContent:"",scrollIntoView(){}};
+    const form={dataset:{form:kind,next:destination},fields,querySelector:q=>q==="button[type=submit]"?button:q===".error"?error:null};
+    await ui.event("submit",{preventDefault(){},target:{closest:()=>form}});
+    assert.equal(error.textContent,"");
+  }
+  await submit("mobile-send",{name:"عميل اختبار",phone:"0536000001",acceptTerms:"on"});
+  assert.deepEqual(sent,{name:"عميل اختبار",phone:"0536000001",acceptTerms:true});
+  assert.match(ui.nodes.get("#main").innerHTML,/data-form="mobile-check"/);
+  await submit("mobile-check",{code:"012345"});
+  assert.deepEqual(checked,{challengeId:"a".repeat(36),code:"012345"});
+  assert.equal(ui.state.user.serviceAccess,true);
+  assert.ok(ui.location.hash.endsWith(destination));
+  assert.match(ui.nodes.get("#main").innerHTML,/data-form="start"/);
+});
+
+test("usage policy names the phone requirement and privacy describes Authentica and hosted Tap payments", async () => {
+  const ui=await app({hash:"#/terms"});
+  assert.match(ui.nodes.get("#main").innerHTML,/يلزم تسجيل الدخول بالاسم الصحيح ورقم جوال تملكه/);
+  ui.location.hash="#/privacy";await ui.render();
+  const html=ui.nodes.get("#main").innerHTML;
+  assert.match(html,/Authentica/);assert.match(html,/Tap/);assert.match(html,/لا نحفظ رمز التحقق نفسه/);
+});
+
+test("ready websites require phone login before preserving template and promotion in the order", async () => {
   const start = new Date(Date.now()-1000).toISOString(), end = new Date(Date.now()+86400000).toISOString();
   const settings = { ...config,services,customerJourney,launchOffer:{code:"ANTLAQH20",ratePercent:20,active:true,startsAt:start,endsAt:end,terms:[]} };
   const ui = await app({hash:"#/ready-websites",settings});
@@ -26,15 +62,15 @@ test("ready websites preserve template and promotion without customer login", as
   assert.match(ui.nodes.get("#footer").innerHTML,/التحويل البنكي هو وسيلة الدفع الوحيدة المتاحة حاليًا/);
   ui.location.hash="#/start?service=ready-website&template=portfolio&promo=ANTLAQH20";
   await ui.render();
-  assert.match(ui.nodes.get("#main").innerHTML,/name="customerName"/);
-  assert.match(ui.nodes.get("#main").innerHTML,/name="customerPhone"/);
-  assert.match(ui.nodes.get("#main").innerHTML,/name="customerEmail"/);
+  assert.match(ui.nodes.get("#main").innerHTML,/data-form="mobile-send"/);
+  assert.match(ui.nodes.get("#main").innerHTML,/data-next="\/start\?service=ready-website&amp;template=portfolio&amp;promo=ANTLAQH20"/);
+  ui.state.user=user; await ui.render();
   assert.match(ui.nodes.get("#main").innerHTML,/value="portfolio" selected/);
   assert.match(ui.nodes.get("#main").innerHTML,/name="addon_hosting"/);
   assert.match(ui.nodes.get("#main").innerHTML,/name="promoCode"[^>]*value="ANTLAQH20"/);
 });
 test("study intake asks both choices and renders every price with conditional funding fields", async () => {
-  const ui = await app({hash:"#/start?service=feasibility",settings:{...config,services,customerJourney}});
+  const ui = await app({hash:"#/start?service=feasibility",session:{user},settings:{...config,services,customerJourney}});
   const html=ui.nodes.get("#main").innerHTML;
   assert.match(html,/name="study_depth"/);
   assert.match(html,/name="study_purpose"/);
@@ -46,8 +82,8 @@ test("study intake asks both choices and renders every price with conditional fu
   assert.match(detail,/لا يُضمن ربح المشروع أو قبول التمويل/);
   ui.location.hash="#/start?service=website";await ui.render();
   assert.match(ui.nodes.get("#main").innerHTML,/id="study-options" class="study-options" hidden disabled/);
-  ui.location.hash="#/study-files/private-order";await ui.render();
-  assert.match(ui.nodes.get("#main").innerHTML,/جلسة المتابعة غير متاحة/);
+  ui.state.user=null; ui.location.hash="#/study-files/private-order";await ui.render();
+  assert.match(ui.nodes.get("#main").innerHTML,/تسجيل الدخول/);
 });
 test("study input changes update the package price and enable financing requirements only when selected",async()=>{
   const ui=await app({settings:{...config,services,customerJourney}});
@@ -66,7 +102,7 @@ test("study input changes update the package price and enable financing requirem
   assert.equal(options.hidden,true);assert.equal(options.disabled,true);
 });
 test("content intake displays all published rates and disables irrelevant questions when choices change",async()=>{
-  const ui=await app({hash:"#/start?service=content-production",settings:{...config,services,customerJourney}});
+  const ui=await app({hash:"#/start?service=content-production",session:{user},settings:{...config,services,customerJourney}});
   const html=ui.nodes.get("#main").innerHTML;
   for(const name of ["type","imageCount","imageFormat","videoCount","videoMode","duration","videoFormat","voice","brand","platform","language","audience","goal","style","references","sourceUrl"]) assert.ok(html.includes(`name="content_${name}"`));
   assert.match(html,/id="content-video-options" hidden disabled/);
@@ -190,10 +226,10 @@ test("structured contracts require provider and scope details and display a save
   assert.match(html,/#\/contract\/test-order\/contract-old/);
 });
 
-test("contract documents require an active follow-up session without customer login", async () => {
+test("contract documents require verified phone login", async () => {
   const ui = await app({hash:"#/contract/private-order/saved-version"});
-  assert.match(ui.nodes.get("#main").innerHTML,/جلسة المتابعة غير متاحة/);
-  assert.match(ui.nodes.get("#main").innerHTML,/ابدأ طلبًا/);
+  assert.match(ui.nodes.get("#main").innerHTML,/تسجيل الدخول/);
+  assert.match(ui.nodes.get("#main").innerHTML,/data-form="mobile-send"/);
   assert.doesNotMatch(ui.nodes.get("#main").innerHTML,/إنشاء حساب/);
   assert.equal(ui.requests.some(r=>r.path.includes("private-order")),false);
 });
@@ -227,14 +263,14 @@ test("initial connection failure offers a retry that reloads config and session"
   assert.match(ui.nodes.get("#main").innerHTML, /homepage-assistant/);
 });
 
-test("an expired customer session clears account state without restoring customer login", async () => {
+test("an expired customer session requires phone login again", async () => {
   const ui = await app({ hash: "#/orders", session: { user, csrf: "expired" }, fetch(path) {
     if (path === "/api/orders") return response({ error: "يلزم تسجيل الدخول." }, 401);
   } });
   assert.equal(ui.state.user, null);
   assert.equal(ui.state.csrf, "");
-  assert.match(ui.nodes.get("#main").innerHTML, /جلسة المتابعة غير متاحة/);
-  assert.match(ui.nodes.get("#main").innerHTML, /ابدأ طلبًا/);
+  assert.match(ui.nodes.get("#main").innerHTML, /تسجيل الدخول/);
+  assert.match(ui.nodes.get("#main").innerHTML, /data-form="mobile-send"/);
   assert.doesNotMatch(ui.nodes.get("#header").innerHTML, /login-link|user-chip/);
 });
 
@@ -277,13 +313,13 @@ test("an old failed request does not clear a more recent login", async () => {
   assert.equal(ui.state.csrf, "new");
 });
 
-test("navigation to the same hash keeps customer account controls hidden", async () => {
+test("navigation to the same hash keeps customer account controls visible", async () => {
   const ui = await app({ hash: "#/services" });
   const sequence = ui.state.sequence;
   ui.state.user = user;
   await ui.go("/services");
   assert.equal(ui.state.sequence, sequence + 1);
-  assert.doesNotMatch(ui.nodes.get("#header").innerHTML, /user-chip|login-link/);
+  assert.match(ui.nodes.get("#header").innerHTML, /user-chip/);
 });
 
 test("configured contact and bank details are shown without HTML injection", async () => {

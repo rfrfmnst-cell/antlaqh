@@ -37,8 +37,8 @@ test("content purchase snapshots its quote and brief through checkout and contra
     const base="http://127.0.0.1:"+app.server.address().port;
     async function actor(suffix){
       const uid=id(),token=id(),csrf=id();
-      await app.db.insert("user",{id:uid,name:"عميل محتوى تجريبي",email:suffix+"@example.test",role:"customer",createdAt:new Date().toISOString()},uid);
-      await app.db.insert("session",{id:digest(token),userId:uid,csrf,expires:Date.now()+86400000,passwordVersion:0},uid);
+      await app.db.insert("user",{id:uid,name:"عميل محتوى تجريبي",email:suffix+"@example.test",role:"customer",phoneVerified:true,accessPolicyVersion:"2026-11-15",phone:"+966550000001",createdAt:new Date().toISOString()},uid);
+      await app.db.insert("session",{id:digest(token),userId:uid,csrf,expires:Date.now()+86400000,authentication:"phone_otp",passwordVersion:0},uid);
       return {cookie:"antlaqh_session="+token,csrf};
     }
     const customer=await actor("content"),other=await actor("other");

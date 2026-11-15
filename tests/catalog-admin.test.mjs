@@ -18,7 +18,7 @@ test('admin catalog persists prices, filters hidden services, and rejects custom
     async function actor(role) {
       const uid = id(), token = id(), csrf = id();
       await app.db.insert('user', { id: uid, role, name: role, email: role + '@example.test' }, uid);
-      await app.db.insert('session', { id: digest(token), userId: uid, csrf, expires: Date.now() + 60000, passwordVersion: 0 }, uid);
+      await app.db.insert('session', { id: digest(token), userId: uid, csrf, expires: Date.now() + 60000, authentication: "phone_otp", passwordVersion: 0 }, uid);
       return { cookie: 'antlaqh_session=' + token, csrf };
     }
     const admin = await actor('admin'), customer = await actor('customer');

@@ -26,9 +26,9 @@ test("new API contracts require details, snapshot complete versions, and keep le
       const uid = id(), token = id(), csrf = id();
       await app.db.insert("user", {
         id: uid, name: role === "admin" ? "مسؤول اختبار" : "عميل اختبار",
-        email: `${role}@example.test`, role, password: "unused-test-fixture", createdAt: new Date().toISOString(),
+        email: `${role}@example.test`, role, phoneVerified:true,accessPolicyVersion:"2026-11-15",phone:"+966550000001", password: "unused-test-fixture", createdAt: new Date().toISOString(),
       }, uid);
-      await app.db.insert("session", { id: digest(token), userId: uid, csrf, expires: Date.now() + 86400000, passwordVersion: 0 }, uid);
+      await app.db.insert("session", { id: digest(token), userId: uid, csrf, expires: Date.now() + 86400000, authentication: "phone_otp", passwordVersion: 0 }, uid);
       return { id: uid, cookie: `antlaqh_session=${token}`, csrf };
     }
     const admin = await actor("admin"), customer = await actor("customer");

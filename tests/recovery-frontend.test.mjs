@@ -20,7 +20,7 @@ async function app({ hash = "#/forgot-password", recovery = {}, session = {}, re
     get hash() { return currentHash; },
     set hash(value) { currentHash = value.startsWith("#") ? value : "#" + value; },
   };
-  const settings = { services: [], customerJourney: [], smsReady: false, assistantReady: false, recovery };
+  const settings = { services: [], customerJourney: [], smsReady: false, assistantReady: false, phoneLogin:{ready:true}, recovery };
   const document = {
     title: "",
     querySelector: selector => nodes.get(selector) || null,
@@ -66,7 +66,7 @@ async function app({ hash = "#/forgot-password", recovery = {}, session = {}, re
 
 test("login links to recovery and unavailable channels remain visible without promising delivery", async () => {
   const ui = await app({ hash: "#/login" });
-  assert.match(ui.nodes.get("#main").innerHTML, /href="#\/forgot-password"/);
+  assert.match(ui.nodes.get("#main").innerHTML, /data-form="mobile-send"/);
   ui.location.hash = "#/forgot-password";
   await ui.render();
   const html = ui.nodes.get("#main").innerHTML;
@@ -160,7 +160,7 @@ test("password length and confirmation are checked before reset and success clea
   assert.equal(ui.state.user, null);
   assert.equal(ui.state.csrf, "");
   assert.equal(ui.location.hash, "#/login");
-  assert.match(ui.nodes.get("#main").innerHTML, /data-form="login"/);
+  assert.match(ui.nodes.get("#main").innerHTML, /data-form="mobile-send"/);
 });
 
 test("a failed or unavailable recovery service does not claim that a message was sent", async () => {
@@ -281,7 +281,7 @@ test("a completed password reset cannot override navigation before hashchange re
   assert.equal(ui.location.hash, "#/services");
   await ui.render();
   assert.equal(ui.state.resetToken, "");
-  assert.doesNotMatch(ui.nodes.get("#main").innerHTML, /data-form="login"/);
+  assert.doesNotMatch(ui.nodes.get("#main").innerHTML, /data-form="mobile-send"/);
 });
 
 test("a completed password reset cannot clear a newer authenticated session", async () => {

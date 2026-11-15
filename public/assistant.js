@@ -90,6 +90,7 @@ function updateControls() {
   send.classList.toggle("ai-loading", busy);
   dialog.setAttribute("aria-busy", String(busy));
 }
+let phoneLoginRequired = false;
 async function checkAvailability() {
   availabilityController?.abort();
   const currentController = new AbortController();
@@ -107,13 +108,20 @@ async function checkAvailability() {
     if (!response.ok) throw Error();
     const config = await response.json();
     if (availabilityController !== currentController) return;
-    ready = config.assistantReady === true;
+    phoneLoginRequired = false;
+    if (config.assistantRequiresLogin === true) {
+      const sessionResponse = await fetch("/api/session", {credentials:"same-origin",cache:"no-store",signal:currentController.signal});
+      const session = await sessionResponse.json();
+      if (availabilityController !== currentController) return;
+      phoneLoginRequired = !sessionResponse.ok || session.user?.serviceAccess !== true;
+    }
+    ready = config.assistantReady === true && !phoneLoginRequired;
     serviceIds = new Set(Array.isArray(config.services) ? config.services.map(service => service?.id).filter(id => typeof id === "string") : []);
     const privacy = host.querySelector(".ai-privacy");
     if (privacy) privacy.textContent = config.assistantMode === "openai"
       ? "تستخدم المحادثة خدمة مساعدة خارجية. لا يصل المساعد إلى حسابك أو ملفاتك. لا ترسل كلمات المرور أو بيانات الدفع. راجع التفاصيل في سياسة الخصوصية."
       : "لا يصل المساعد إلى حسابك أو ملفاتك. تبقى المحادثة في هذه الصفحة حتى تمسحها أو تحدّث الصفحة. لا ترسل كلمات المرور أو بيانات الدفع.";
-    status.textContent = ready
+    status.textContent = phoneLoginRequired ? "سجّل الدخول باسمك وجوالك لاستخدام المساعد." : ready
       ? config.assistantMode === "guided"
         ? "الإرشاد المجاني متاح الآن من معلومات خدمات انطلاقة."
         : "المساعد متاح لاكتشاف الخدمات وتوضيح الخطوة التالية."
@@ -151,6 +159,12 @@ async function open() {
   launcher.setAttribute("aria-expanded", "true");
   host.querySelector(".ai-close").focus();
   await checkAvailability();
+  if (generation === openingGeneration && phoneLoginRequired) {
+    close();
+    const next = window.location.hash.slice(1) || "/";
+    window.location.hash = "/login?next=" + encodeURIComponent(next);
+    return generation;
+  }
   if (generation === openingGeneration && ready && !busy && dialog.open) input.focus();
   return generation;
 }

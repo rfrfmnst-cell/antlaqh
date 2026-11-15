@@ -46,8 +46,8 @@ test('study purchase prices all four plans, snapshots scope, authorizes document
     if(!app.server.listening) await new Promise(done=>app.server.once('listening',done));
     const base='http://127.0.0.1:'+app.server.address().port;
     async function actor(role,suffix=''){
-      const uid=id(),token=id(),csrf=id();await app.db.insert('user',{id:uid,name:'اختبار دراسة الجدوى',email:role+suffix+'@example.test',role,createdAt:new Date().toISOString()},uid);
-      await app.db.insert('session',{id:digest(token),userId:uid,csrf,expires:Date.now()+86400000,passwordVersion:0},uid);
+      const uid=id(),token=id(),csrf=id();await app.db.insert('user',{id:uid,name:'اختبار دراسة الجدوى',email:role+suffix+'@example.test',role,phoneVerified:true,accessPolicyVersion:'2026-11-15',phone:'+966550000001',createdAt:new Date().toISOString()},uid);
+      await app.db.insert('session',{id:digest(token),userId:uid,csrf,expires:Date.now()+86400000,authentication:"phone_otp",passwordVersion:0},uid);
       return {cookie:'antlaqh_session='+token,csrf};
     }
     const customer=await actor('customer'),other=await actor('customer','2'),admin=await actor('admin');

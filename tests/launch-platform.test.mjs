@@ -1,3 +1,4 @@
+import { verifiedSession } from "./verified-session.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -28,6 +29,7 @@ test("launch purchase preserves valid choices, calculates each quote once, and k
     const registered = await req("/api/auth/register", { name:"اختبار الإطلاق", email:"launch@example.test", password:secret, acceptTerms:true });
     assert.equal(registered.status,201);
     const actor = { ...registered.data, cookie:registered.headers.get("set-cookie").split(";")[0] };
+    await verifiedSession(app.db,actor.cookie);
     const config = await req("/api/config");
     assert.equal(config.data.payments,"bank_transfer");
     assert.equal(config.data.integrations.ga4MeasurementId,null);

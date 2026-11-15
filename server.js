@@ -20,6 +20,8 @@ import { createEdfapayCheckout } from "./lib/edfapay-checkout.js";
 import { createTapCheckout, tapWebhookPath } from "./lib/tap-checkout.js";
 import { createTapWebhook } from "./lib/tap-webhook.js";
 import { createSms } from "./lib/sms.js";
+import { createPhoneLogin, hasServiceAccess, accessPolicyVersion } from "./lib/phone-login.js";
+import { checkIntegrations } from "./lib/integration-checks.js";
 import {
   id,
   digest,
@@ -90,6 +92,8 @@ const edfapayWebhook = createEdfapayWebhook({ db, origin });
 const edfapayCheckout = createEdfapayCheckout({ origin });
 const tapCheckout = createTapCheckout({ origin });
 const tapWebhook = createTapWebhook({ db });
+const phoneLogin = createPhoneLogin({ db });
+const integrationChecks = production ? await checkIntegrations() : null;
 let businessWhatsapp = "966553575760";
 try { businessWhatsapp = normalizePhone(process.env.BUSINESS_WHATSAPP_PHONE || "+966553575760").slice(1); } catch {}
 const now = () => new Date().toISOString();
@@ -204,7 +208,7 @@ async function session(req) {
     return null;
   return { s, u };
 }
-async function login(res, u) {
+async function login(res, u, authentication = "password") {
   const token = id();
   const s = {
     id: digest(token),
@@ -213,10 +217,15 @@ async function login(res, u) {
     expires: Date.now() + 7 * 86400_000,
     passwordVersion: u.passwordVersion || 0,
     authVersion: u.authVersion || 0,
+    authentication,
   };
   await db.insert("session", s, u.id);
   cookie(res, token);
-  return { user: publicUser(u), csrf: s.csrf };
+  return { user: { ...publicUser(u), serviceAccess: hasServiceAccess({ u, s }) }, csrf: s.csrf };
+}
+function requireServiceAccess(auth) {
+  authorize(auth);
+  if (!hasServiceAccess(auth)) throw fail(401, "سجّل الدخول باسمك ورقم جوالك وأكّد رمز التحقق قبل استخدام الخدمات.");
 }
 function authorize(auth, admin = false) {
   if (!auth) throw fail(401, "سجّل الدخول للمتابعة.");
@@ -473,6 +482,8 @@ async function api(req, res, url) {
     "/api/auth/login",
     "/api/auth/otp/send",
     "/api/auth/otp/check",
+    "/api/auth/mobile/send",
+    "/api/auth/mobile/check",
     "/api/auth/recovery/request",
     "/api/auth/recovery/verify",
     "/api/auth/recovery/reset",
@@ -513,6 +524,10 @@ async function api(req, res, url) {
         sms: { transactional: sms.ready, provider: sms.provider, mode: sms.mode },
       },
       smsReady,
+      phoneLogin: phoneLogin.readiness,
+      accessPolicyVersion,
+      assistantRequiresLogin: true,
+      integrationChecks,
       smsNotificationsReady: sms.ready,
       assistantReady: assistant.ready,
       assistantMode: assistant.mode,
@@ -536,6 +551,7 @@ async function api(req, res, url) {
       siteOrigin: origin,
     });
   if (method === "POST" && path === "/api/assistant") {
+    requireServiceAccess(auth);
     rate(`assistant:${ip}`, 8, 5 * 60 * 1000);
     rate(`assistant-day:${ip}`, 40, 24 * 60 * 60 * 1000);
     const b = await jsonBody(req);
@@ -545,9 +561,21 @@ async function api(req, res, url) {
     return json(
       res,
       200,
-      auth ? { user: publicUser(auth.u), csrf: auth.s.csrf } : { user: null },
+      auth ? { user: { ...publicUser(auth.u), serviceAccess: hasServiceAccess(auth) }, csrf: auth.s.csrf } : { user: null },
     );
+  if (method === "POST" && path === "/api/auth/mobile/send") {
+    rate(`mobile-send:${ip}`, 20);
+    return json(res, 200, await phoneLogin.send(await jsonBody(req)));
+  }
+  if (method === "POST" && path === "/api/auth/mobile/check") {
+    rate(`mobile-check:${ip}`, 40);
+    const user = await phoneLogin.check(await jsonBody(req));
+    if (auth) await db.remove("session", auth.s.id);
+    return json(res, 200, await login(res, user, "phone_otp"));
+  }
+  if (/^\/api\/(orders|tickets|notifications)(\/|$)/.test(path)) requireServiceAccess(auth);
   if (method === "POST" && trackingSessionMatch) {
+    requireServiceAccess(auth);
     rate(`track-session:${ip}`, 30);
     const oid = trackingSessionMatch[1];
     const b = await jsonBody(req);
@@ -555,10 +583,11 @@ async function api(req, res, url) {
     const order = await db.get("order", oid);
     if (!order || !order.trackingTokenHash || digest(token) !== order.trackingTokenHash)
       throw fail(404, "رابط متابعة الطلب غير صالح.");
+    owned(order, auth);
     const user = await db.get("user", order.owner);
     if (!user || user.disabled || user.role !== "customer")
       throw fail(404, "رابط متابعة الطلب غير صالح.");
-    return json(res, 200, await login(res, user));
+    return json(res, 200, { user: { ...publicUser(auth.u), serviceAccess: hasServiceAccess(auth) }, csrf: auth.s.csrf });
   }
   if (method === "POST" && path === "/api/auth/recovery/request") {
     rate(`recovery-request:${ip}`, 12);
@@ -574,21 +603,7 @@ async function api(req, res, url) {
     return json(res, 200, result);
   }
   if (method === "POST" && path === "/api/auth/guest") {
-    rate(`guest:${ip}`, 12);
-    const b = await jsonBody(req);
-    const guestId = id();
-    const u = {
-      id: guestId,
-      name: text(b.name, 2, 100),
-      email: email(b.email),
-      role: "customer",
-      guest: true,
-      phoneVerified: false,
-      createdAt: now(),
-    };
-    if (b.phone) u.phone = normalizePhone(b.phone);
-    await db.insert("user", u, guestId);
-    return json(res, 201, await login(res, u));
+    throw fail(410, "يلزم تسجيل الدخول بالاسم ورقم الجوال والتحقق من الرمز قبل بدء الطلب.");
   }
   if (method === "POST" && path === "/api/auth/register") {
     rate(`register:${ip}`, 8);
@@ -1196,10 +1211,11 @@ async function api(req, res, url) {
       rate(`online-checkout:${auth.u.id}`, 10, 60000);
       const providerOrderId = `${o.number}-${id().slice(0, 12)}`;
       const checkoutInput = await jsonBody(req);
+      const paymentOrder = { ...o, customer: { ...o.customer, email: email(checkoutInput.email || o.customer.email) } };
       const provider = checkoutInput?.provider === "tap" ? "tap" : "edfapay";
       const session = provider === "tap"
-        ? await tapCheckout.initiate({ order: o, providerOrderId })
-        : await edfapayCheckout.initiate({ order: o, providerOrderId, billing: checkoutInput.billing, payerIp: ip });
+        ? await tapCheckout.initiate({ order: paymentOrder, providerOrderId })
+        : await edfapayCheckout.initiate({ order: paymentOrder, providerOrderId, billing: checkoutInput.billing, payerIp: ip });
       await db.insert(provider === "tap" ? "tapAttempt" : "edfapayAttempt", {
         id: digest(providerOrderId),
         providerOrderId,
@@ -1345,7 +1361,7 @@ async function api(req, res, url) {
       return json(res, 200, {
         email: { ready: recovery.readiness.emailReady },
         whatsapp: { ready: recovery.readiness.whatsappReady, direct: true, provider: recovery.readiness.whatsappReady ? "twilio" : null },
-        sms: { configured: smsReady },
+        sms: { configured: phoneLogin.readiness.ready || smsReady, provider: phoneLogin.readiness.ready ? "authentica" : "twilio", phoneLogin: phoneLogin.readiness },
         meta: metaWebhook.readiness,
         tap: { ...tapWebhook.readiness, checkout: tapCheckout.readiness, callbackUrl: tapCheckout.readiness.configured ? origin + tapWebhookPath : null },
         edfapay: {
