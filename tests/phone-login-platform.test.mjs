@@ -14,7 +14,9 @@ test('HTTP journey requires OTP for services and reuses the verified account wit
     globalThis.fetch = async (url, options) => {
       if (!String(url).startsWith('https://api.authentica.sa/')) throw Error('unexpected external request');
       const b = JSON.parse(options.body);
-      return new Response(JSON.stringify(String(url).endsWith('/verify-otp') ? { verified: b.otp === '012345' } : { success: true }), { status: 200 });
+      return new Response(JSON.stringify(String(url).endsWith('/verify-otp')
+        ? { status: b.otp === '012345', message: b.otp === '012345' ? 'OTP verified successfully' : 'Invalid OTP' }
+        : { success: true, data: null, message: 'OTP send successfully' }), { status: 200 });
     };
     app = await import('../server.js?mobile=' + randomBytes(6).toString('hex'));
     if (!app.server.listening) await new Promise(done => app.server.once('listening', done));

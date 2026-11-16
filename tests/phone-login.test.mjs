@@ -82,6 +82,20 @@ test('provider failures reveal no keys or upstream payload and create no verifie
     assert.equal((await db.list('user')).length, 0);
   });
 });
+test('documented Authentica v2 boolean status verifies the account while false, strings and contradictory flags fail closed', async () => {
+  await fixture(async ({ auth, db, input, approve }) => {
+    const sent = await auth.send(input);
+    for (const result of [{ status: false }, { status: 'true' }, { success: true }, { status: true, verified: false }]) {
+      approve(result);
+      await assert.rejects(auth.check({ challengeId: sent.challengeId, code: '123456' }), { status: 400 });
+      assert.equal((await db.list('user')).length, 0);
+    }
+    approve({ status: true, message: 'OTP verified successfully' });
+    const user = await auth.check({ challengeId: sent.challengeId, code: '123456' });
+    assert.equal(user.phoneVerified, true);
+    await assert.rejects(auth.check({ challengeId: sent.challengeId, code: '123456' }), { status: 400 });
+  });
+});
 test('phone proof cannot take an admin account or an unverified legacy reservation', async () => {
   await fixture(async ({ auth, db, input }) => {
     const sent = await auth.send(input), uid = id(), key = digest('+966536000001');
