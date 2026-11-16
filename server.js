@@ -94,6 +94,11 @@ const tapCheckout = createTapCheckout({ origin });
 const tapWebhook = createTapWebhook({ db });
 const phoneLogin = createPhoneLogin({ db });
 const integrationChecks = production ? await checkIntegrations() : null;
+const contractPaymentOptions = () => ({
+  bankTransfer: true,
+  ...(tapCheckout.readiness.configured ? {tap: {mode: tapCheckout.readiness.mode}} : {}),
+  ...(edfapayCheckout.readiness.configured ? {edfapay: {mode: edfapayCheckout.readiness.mode}} : {}),
+});
 let businessWhatsapp = "966553575760";
 try { businessWhatsapp = normalizePhone(process.env.BUSINESS_WHATSAPP_PHONE || "+966553575760").slice(1); } catch {}
 const now = () => new Date().toISOString();
@@ -1066,6 +1071,7 @@ async function api(req, res, url) {
       q.document = createContractDocument(details, {
         ...q,
         contact: providerDetails,
+        paymentOptions: contractPaymentOptions(),
         customer: o.customer,
         siteOptions: o.siteOptions,
         studyDetails: o.study,
@@ -1154,6 +1160,7 @@ async function api(req, res, url) {
         q.document = createContractDocument(details, {
           ...q,
           contact: providerDetails,
+          paymentOptions: contractPaymentOptions(),
           customer: x.customer,
           siteOptions: x.siteOptions,
           studyDetails: x.study,

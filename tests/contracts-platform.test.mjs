@@ -41,7 +41,7 @@ test("new API contracts require details, snapshot complete versions, and keep le
       });
       return { status: response.status, data: await response.json() };
     }
-    assert.deepEqual((await request("/api/config")).data.contracts, { schemaVersion: 2, policyVersion: "2026-10-01", required: true });
+    assert.deepEqual((await request("/api/config")).data.contracts, { schemaVersion: 2, policyVersion: "2026-11-16", required: true });
     assert.equal((await request("/api/admin/contract-provider")).status, 401);
     assert.equal((await request("/api/admin/contract-provider", undefined, customer)).status, 403);
     assert.deepEqual((await request("/api/admin/contract-provider", undefined, admin)).data, {

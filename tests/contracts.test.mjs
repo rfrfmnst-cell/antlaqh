@@ -53,14 +53,14 @@ test("contract documents snapshot details and preserve review, cancellation and 
   };
   const doc = createContractDocument(details, context);
   assert.equal(doc.schemaVersion, contractMetadata.schemaVersion);
-  assert.equal(doc.policyVersion, "2026-10-01");
+  assert.equal(doc.policyVersion, "2026-11-16");
   assert.deepEqual(doc.details, details);
   details.deliverables = "Changed after snapshot";
   assert.equal(doc.details.deliverables, fixture.deliverables);
   const all = doc.sections.map((section) => section.title + "\n" + section.body).join("\n");
   assert.match(all, /شهادة العمل الحر/);
   assert.doesNotMatch(doc.sections[0].body, /رقم السجل التجاري/);
-  assert.match(all, /تحويل بنكي فقط/);
+  assert.match(all, /التحويل البنكي/);
   assert.match(all, /لا يعد موافقة صامتة/);
   assert.match(all, /سبعة أيام/);
   assert.match(all, /خمسة عشر يومًا/);
@@ -68,4 +68,22 @@ test("contract documents snapshot details and preserve review, cancellation and 
   assert.match(all, /20[0-9]\.00 ر\.س/);
   assert.match(all, /تراخيص للطرف الثالث/);
   assert.ok(doc.sections.every((section) => typeof section.title === "string" && typeof section.body === "string" && section.body.length));
+});
+test("new contracts snapshot available payment channels, distinguish Tap sandbox and include a phone-only customer", () => {
+  const context = {
+    agreement:"نطاق اختبار قناة الدفع دون تنفيذ شراء فعلي.",terms:"طلب اختبار تقني فقط.",
+    contact:{email:"test@example.test",phone:"+966550000000"},customer:{name:"عميل جوال",phone:"+966550000001",email:""},
+    subtotal:69000,discount:0,amount:69000,
+    paymentOptions:{bankTransfer:true,tap:{mode:"sandbox"}},
+  };
+  const doc=createContractDocument(validateContractDetails(structuredClone(contractDetailsFixture)),context);
+  const payment=doc.sections.find(s=>s.title==="السعر وطريقة الدفع").body;
+  assert.match(payment,/Tap متاح في بيئة الاختبار التقني فقط/);
+  assert.match(payment,/لا تحصّل أموالًا/);
+  assert.doesNotMatch(payment,/بتحويل بنكي فقط/);
+  assert.match(doc.sections[0].body,/\+966550000001/);
+  assert.doesNotMatch(doc.sections[0].body,/undefined/);
+  context.paymentOptions.tap.mode="production";
+  assert.equal(doc.paymentOptions.tap.mode,"sandbox");
+  assert.equal(doc.sections.find(s=>s.title==="السعر وطريقة الدفع").body,payment);
 });
