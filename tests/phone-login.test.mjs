@@ -131,3 +131,10 @@ test('read-only integration probes scope Tap to the merchant and expose only san
   assert.deepEqual(JSON.parse(requests.find(r => r.url.includes('tap.company')).options.body).merchants, ['68096112']);
   assert.doesNotMatch(JSON.stringify(result), /secret-auth|sk_test_|private-charge|private@example/);
 });
+test('Tap diagnostics preserve a safe provider error code on HTTP 400 and discard private response details', async () => {
+  const env = { TAP_SECRET_KEY: 'sk_test_' + 'x'.repeat(25), TAP_MERCHANT_ID: '68096112' };
+  const result = await checkIntegrations({ env, request: async () => ({ status: 400, ok: false,
+    json: async () => ({ errors: [{ code: '2104', description: 'private merchant detail' }], secret: env.TAP_SECRET_KEY }) }) });
+  assert.deepEqual(result.tap, { state: 'rejected', httpStatus: 400, providerCode: '2104' });
+  assert.doesNotMatch(JSON.stringify(result), /sk_test_|private merchant/);
+});
