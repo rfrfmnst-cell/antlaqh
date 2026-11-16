@@ -128,7 +128,7 @@ test('read-only integration probes scope Tap to the merchant and expose only san
       { object_type: 'list', live_mode: false, charges: [{ id: 'private-charge', customer: { email: 'private@example.test' } }] } };
   } });
   assert.equal(result.authentica.state, 'accepted'); assert.equal(result.tap.state, 'accepted');
-  assert.deepEqual(JSON.parse(requests.find(r => r.url.includes('tap.company')).options.body).merchants, ['68096112']);
+  assert.deepEqual(JSON.parse(requests.find(r => r.url.includes('tap.company')).options.body), {limit:'1',merchants:['68096112']});
   assert.doesNotMatch(JSON.stringify(result), /secret-auth|sk_test_|private-charge|private@example/);
 });
 test('Tap diagnostics preserve a safe provider error code on HTTP 400 and discard private response details', async () => {
