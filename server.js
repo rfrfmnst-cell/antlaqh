@@ -1212,6 +1212,25 @@ async function api(req, res, url) {
       });
       return json(res, 200, result);
     }
+    if (method === "GET" && action === "payment-status") {
+      if (url.searchParams.get("provider") !== "tap") throw fail(400,"مزوّد الدفع غير مدعوم للتحقق.");
+      rate(`payment-status:${auth.u.id}`,20,60000);
+      const chargeId=url.searchParams.get("chargeId");
+      if (chargeId && !/^chg_[A-Za-z0-9_-]{8,}$/.test(chargeId)) throw fail(400,"مرجع عملية تاب غير صالح.");
+      const attempts=(await db.list("tapAttempt",o.owner)).filter(attempt=>attempt.orderId===o.id &&
+        attempt.amount===o.amount && (!attempt.contractId || attempt.contractId===o.currentContract) &&
+        (!chargeId || attempt.chargeId===chargeId)).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+      const attempt=attempts[0];
+      if (!attempt) throw fail(404,"لا توجد محاولة دفع تاب مطابقة لهذا الطلب.");
+      const result=await tapCheckout.retrieve({attempt});
+      const receipt=await db.get("tapReceipt",digest(result.chargeId+":"+result.status));
+      result.webhookVerified=!!(receipt?.verified && receipt.orderId===o.id &&
+        receipt.chargeId===attempt.chargeId && receipt.orderRef===attempt.providerOrderId &&
+        receipt.amountHalalas===attempt.amount && receipt.currency===attempt.currency &&
+        receipt.merchantId===String(process.env.TAP_MERCHANT_ID || "").trim() &&
+        receipt.liveMode===(result.mode==="production"));
+      return json(res,200,result);
+    }
     if (method === "POST" && action === "payment-session") {
       if (auth.u.id !== o.owner)
         throw fail(403, "إنشاء جلسة الدفع متاح لصاحب الطلب فقط.");
@@ -1230,6 +1249,7 @@ async function api(req, res, url) {
         orderNumber: o.number,
         amount: o.amount,
         currency: "SAR",
+        contractId: o.currentContract,
         ...(provider === "tap" ? { chargeId: session.chargeId } : {}),
         createdAt: now(),
       }, o.owner);

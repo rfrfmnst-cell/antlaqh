@@ -88,3 +88,36 @@ test("Tap signed webhook is verified and never auto-confirms payment",async()=>{
  assert.equal(recorded[0][1].requiresReview,true);
  assert.equal(recorded[0][1].orderId,null);
 });
+
+test("Tap retrieves a recorded charge with only a sanitized status result",async()=>{
+ const attempt={chargeId:"chg_TEST0123456789",providerOrderId:"ANT-TEST-1-ABC123",amount:29900,currency:"SAR"};
+ let request;
+ const checkout=createTapCheckout({env,request:async(url,options)=>{
+  request={url,options};
+  return {ok:true,json:async()=>({id:attempt.chargeId,object:"charge",status:"CAPTURED",live_mode:false,
+   merchant_id:"123456",amount:299,currency:"SAR",reference:{order:attempt.providerOrderId},
+   customer:{email:"private@example.test"},card:{last_four:"1019"}})};
+ }});
+ const result=await checkout.retrieve({attempt});
+ assert.equal(request.url,"https://api.tap.company/v2/charges/"+attempt.chargeId);
+ assert.equal(request.options.method,"GET");
+ assert.equal(request.options.redirect,"error");
+ assert.equal(request.options.headers.authorization,"Bearer "+key);
+ assert.deepEqual(result,{provider:"tap",chargeId:attempt.chargeId,status:"CAPTURED",mode:"sandbox",amount:29900,currency:"SAR",requiresReview:true});
+ assert.doesNotMatch(JSON.stringify(result),/private|1019|sk_test_/);
+});
+
+test("Tap rejects unrecorded references and mismatched retrieved charges",async()=>{
+ const attempt={chargeId:"chg_TEST0123456789",providerOrderId:"ANT-TEST-1-ABC123",amount:29900,currency:"SAR"};
+ for(const overrides of [{id:"chg_OTHER0123456789"},{merchant_id:"another-merchant"},{merchant:{id:"conflicting-merchant"}},
+  {amount:1},{currency:"KWD"},{live_mode:true},{reference:{order:"ANOTHER-ORDER"}},{status:"<script>"}]) {
+  const checkout=createTapCheckout({env,request:async()=>({ok:true,json:async()=>({
+   id:attempt.chargeId,object:"charge",status:"CAPTURED",live_mode:false,merchant_id:"123456",
+   amount:299,currency:"SAR",reference:{order:attempt.providerOrderId},...overrides})})});
+  await assert.rejects(checkout.retrieve({attempt}),{status:502});
+ }
+ let called=false;
+ const checkout=createTapCheckout({env,request:async()=>{called=true;throw Error();}});
+ await assert.rejects(checkout.retrieve({attempt:{...attempt,chargeId:"https://evil.example"}}),{status:409});
+ assert.equal(called,false);
+});

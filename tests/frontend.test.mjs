@@ -139,7 +139,7 @@ test("an expired launch offer is no longer advertised but a saved quote shows it
   assert.match(saved,/الإجمالي النهائي/);
 });
 
-async function app({ hash = "#/", session = {}, fetch: request, settings = config } = {}) {
+async function app({ hash = "#/", search = "", session = {}, fetch: request, settings = config } = {}) {
   const listeners = new Map();
   function element() {
     const classes = new Set();
@@ -164,7 +164,8 @@ async function app({ hash = "#/", session = {}, fetch: request, settings = confi
     };
   }
   const nodes = new Map(["#main", "#header", "#footer", "#toast", "#main-nav", '[data-action="menu"]'].map((key) => [key, element()]));
-  const location = { hash };
+  const location = { hash, search, pathname:"/" };
+  const replacements = [];
   const requests = [];
   const document = {
     title: "",
@@ -181,7 +182,7 @@ async function app({ hash = "#/", session = {}, fetch: request, settings = confi
     FormData: class { constructor(form) { return Object.entries(form.fields); } },
     setTimeout: () => 1,
     clearTimeout: () => {},
-    window: { scrollTo() {}, addEventListener() {}, print() {} },
+    window: { scrollTo() {}, addEventListener() {}, print() {}, history:{replaceState(_state,_unused,url){replacements.push(url);location.search=new URL(url,"https://antlaqh.com").search;}} },
     fetch: async (path, options) => {
       requests.push({ path, options });
       if (request) {
@@ -196,7 +197,7 @@ async function app({ hash = "#/", session = {}, fetch: request, settings = confi
   });
   const runtime = await new vm.Script(`(async () => { ${source}\nreturn { state, render, api, go, header, paymentCard, paymentPage, serviceDetail, priceSummary, launchBanner, readyWebsites, start, whatsappLink, quoteForm, contractCard, contractDocument }; })()`).runInContext(context);
   return {
-    ...runtime, nodes, location, requests, document,
+    ...runtime, nodes, location, requests, document, replacements,
     async event(name, event) {
       for (const handler of listeners.get(name) || []) await handler(event);
     },
@@ -365,6 +366,36 @@ test("EdfaPay return page never claims payment is confirmed from the browser red
   const html=await ui.paymentPage("order-2",new URLSearchParams("provider=edfapay&result=success"));
   assert.match(html,/تتحقق الإدارة من استلام المبلغ لدى مزوّد الدفع/);
   assert.doesNotMatch(html,/تم تأكيد استلام الدفع/);
+});
+
+test("Tap return retrieves the server result, removes provider query data and labels sandbox capture honestly",async()=>{
+ const order={id:"tap-order",number:"ANT-TAP",amount:69000,status:"awaiting_payment",files:[],contracts:[],type:"service"};
+ const chargeId="chg_RETURN0123456789";
+ const ui=await app({search:`?tap_id=${chargeId}&data=untrusted-callback&campaign=launch`,session:{user},
+  fetch:async(path)=>path==="/api/orders/tap-order"?response(order):
+   path===`/api/orders/tap-order/payment-status?provider=tap&chargeId=${chargeId}`?
+    response({status:"CAPTURED",mode:"sandbox",webhookVerified:true,requiresReview:true}):null});
+ const html=await ui.paymentPage("tap-order",new URLSearchParams("provider=tap&result=failure"));
+ assert.match(html,/نجحت تجربة الدفع لدى Tap/);
+ assert.match(html,/لا تمثل تحصيل أموال أو سداد ثمن الخدمة/);
+ assert.match(html,/استُلم إشعار نتيجة العملية/);
+ assert.equal(ui.location.search,"?campaign=launch");
+ assert.doesNotMatch(ui.replacements[0],/tap_id|untrusted-callback/);
+ assert.doesNotMatch(html,/لم تكتمل عملية الدفع الإلكتروني/);
+});
+
+test("Tap return ignores forged success and shows an unverified or failed result without approving payment",async()=>{
+ const order={id:"tap-order",number:"ANT-TAP",amount:69000,status:"awaiting_payment",files:[],contracts:[]};
+ for(const status of ["DECLINED","INITIATED","unavailable"]){
+  const ui=await app({session:{user},fetch:async(path)=>path==="/api/orders/tap-order"?response(order):
+   path==="/api/orders/tap-order/payment-status?provider=tap"?
+    (status==="unavailable"?response({error:"upstream"},502):response({status,mode:"sandbox"})):null});
+  const html=await ui.paymentPage("tap-order",new URLSearchParams("provider=tap&result=success"));
+  assert.doesNotMatch(html,/نجحت تجربة الدفع|تؤكد Tap نجاح العملية|تم تأكيد استلام الدفع/);
+  if(status==="DECLINED") assert.match(html,/لم تكتمل عملية الدفع لدى Tap/);
+  else if(status==="INITIATED") assert.match(html,/معلّقة أو نتيجتها غير محسومة/);
+  else assert.match(html,/تعذر التحقق من النتيجة الآن/);
+ }
 });
 
 test("service detail uses the catalog fallback artwork for an additional service", async () => {

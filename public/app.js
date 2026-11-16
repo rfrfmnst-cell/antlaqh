@@ -827,13 +827,35 @@ async function paymentPage(oid, query = new URLSearchParams()) {
   const q = o.contracts.find((contract) => contract.id === o.currentContract);
   if (o.status === "quoted" && q && !q.acceptedAt)
     return `<div class="wrap"><div class="checkout">${pageHead("الدفع", "يجب الموافقة على العقد قبل الانتقال للدفع.")}<section class="panel">${link("/contract/" + o.id + "/" + q.id, "مراجعة العقد والموافقة")}</section></div></div>`;
-  const returned = ["edfapay","tap"].includes(query.get("provider"))
+  let tapReturn = "";
+  if (query.get("provider") === "tap") {
+    const callback = new URLSearchParams(location.search || "");
+    const chargeId = callback.get("tap_id") || query.get("tap_id");
+    if (callback.has("tap_id") || callback.has("data")) {
+      callback.delete("tap_id"); callback.delete("data");
+      window.history.replaceState(null,"",(location.pathname || "/")+(callback.size ? "?"+callback : "")+location.hash);
+    }
+    try {
+      const result = await api(`/api/orders/${encodeURIComponent(oid)}/payment-status?provider=tap${chargeId ? "&chargeId="+encodeURIComponent(chargeId) : ""}`);
+      const failed = ["ABANDONED","CANCELLED","FAILED","DECLINED","RESTRICTED","VOID","TIMEDOUT"].includes(result.status);
+      const message = result.status === "CAPTURED"
+        ? result.mode === "sandbox"
+          ? "نجحت تجربة الدفع لدى Tap. هذه عملية تجريبية ولا تمثل تحصيل أموال أو سداد ثمن الخدمة."
+          : "تؤكد Tap نجاح العملية. تراجع الإدارة مطابقة التحصيل مع الطلب قبل اعتماد السداد."
+        : failed ? "لم تكتمل عملية الدفع لدى Tap. يمكنك إعادة المحاولة؛ لا تُعد هذه المحاولة سدادًا للخدمة."
+          : "عملية Tap ما زالت معلّقة أو نتيجتها غير محسومة. أعد تحميل الصفحة لاحقًا للتحقق، دون إعادة الدفع الآن.";
+      tapReturn = `<div class="notice${failed ? " warning" : ""}" role="status">${message}${result.webhookVerified ? "<br>استُلم إشعار نتيجة العملية من Tap وتم التحقق منه." : ""}</div>`;
+    } catch {
+      tapReturn = '<div class="notice warning" role="status">عدت من Tap، وتعذر التحقق من النتيجة الآن. لا تعاود الدفع قبل مراجعة حالة العملية مع الدعم.</div>';
+    }
+  }
+  const returned = tapReturn || (query.get("provider") === "edfapay"
     ? query.get("result") === "success"
       ? '<div class="notice">عدت من بوابة الدفع. تتحقق الإدارة من استلام المبلغ لدى مزوّد الدفع قبل اعتبار الطلب مدفوعًا؛ يمكنك متابعة حالة الطلب من هذه الصفحة.</div>'
       : query.get("result") === "failure"
         ? '<div class="notice warning">لم تكتمل عملية الدفع الإلكتروني. يمكنك المحاولة مرة أخرى أو استخدام التحويل البنكي.</div>'
         : ""
-    : "";
+    : "");
   return `<div class="wrap"><div class="checkout">${pageHead("الدفع", (state.config?.paymentMethods?.edfapay?.available || state.config?.paymentMethods?.tap?.available) ? "اختر الدفع الإلكتروني أو التحويل البنكي بعد موافقتك على العقد." : "التحويل البنكي هو وسيلة الدفع الوحيدة المتاحة حاليًا. يُتوقع تفعيل الدفع الإلكتروني بحلول 13 نوفمبر 2026. بعد الموافقة على العقد أكمل التحويل وأرسل الإيصال للمراجعة.")}${returned}${trackingLink(o.id)}${o.type === "service" ? progress(o) : ""}${paymentCard(o)}<div class="actions spaced">${link("/order/" + o.id, "متابعة الطلب", "secondary")}</div></div></div>`;
 }
 async function contracts(path) {
