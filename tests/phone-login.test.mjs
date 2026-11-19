@@ -138,3 +138,33 @@ test('Tap diagnostics preserve a safe provider error code on HTTP 400 and discar
   assert.deepEqual(result.tap, { state: 'rejected', httpStatus: 400, providerCode: '2104' });
   assert.doesNotMatch(JSON.stringify(result), /sk_test_|private merchant/);
 });
+
+test('authorized live Tap credentials are checked read-only in the matching merchant and environment',async()=>{
+  const env={TAP_SECRET_KEY:'sk_live_'+'x'.repeat(25),TAP_MERCHANT_ID:'live-merchant',TAP_ALLOW_LIVE:'true'};
+  let request;
+  const result=await checkIntegrations({env,request:async(url,options)=>{
+    request={url,options};
+    return {status:200,ok:true,json:async()=>({object:'list',live_mode:true,charges:[{customer:{email:'private@example.test'}}]})};
+  }});
+  assert.equal(result.tap.state,'accepted');
+  assert.equal(request.url,'https://api.tap.company/v2/charges/list');
+  assert.deepEqual(JSON.parse(request.options.body),{limit:'1',merchants:['live-merchant']});
+  assert.equal(request.options.headers.Authorization,'Bearer '+env.TAP_SECRET_KEY);
+  assert.doesNotMatch(JSON.stringify(result),/sk_live_|private@example|customer/);
+});
+
+test('live Tap credentials are not probed before live operation is explicitly enabled',async()=>{
+  let called=false;
+  const result=await checkIntegrations({env:{TAP_SECRET_KEY:'sk_live_'+'x'.repeat(25),TAP_MERCHANT_ID:'live-merchant',TAP_ALLOW_LIVE:'false'},
+    request:async()=>{called=true;throw Error('should not call');}});
+  assert.equal(called,false);
+  assert.equal(result.tap.state,'not_configured');
+});
+
+test('Tap credential checks reject an API response from the other environment',async()=>{
+  for(const live of [false,true]){
+    const result=await checkIntegrations({env:{TAP_SECRET_KEY:(live?'sk_live_':'sk_test_')+'x'.repeat(25),TAP_MERCHANT_ID:'test-merchant',TAP_ALLOW_LIVE:'true'},
+      request:async()=>({status:200,ok:true,json:async()=>({object:'list',live_mode:!live,charges:[]})})});
+    assert.equal(result.tap.state,'unexpected_response');
+  }
+});
